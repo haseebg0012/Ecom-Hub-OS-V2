@@ -10,7 +10,6 @@ import {
   FileText,
   BarChart3,
   Bell,
-  Sparkles,
   Building2,
   ShieldCheck,
   Boxes,
@@ -148,18 +147,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         },
       ],
     },
-    {
-      groupTitle: 'AI',
-      items: [
-        {
-          id: 'copilot',
-          label: 'Business Copilot',
-          icon: Sparkles,
-          badge: 'AI',
-          requiredPermission: 'ai_copilot.view',
-        },
-      ],
-    },
+
     {
       groupTitle: 'SETTINGS',
       items: [
