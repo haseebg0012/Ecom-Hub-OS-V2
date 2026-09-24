@@ -229,9 +229,16 @@ export const EmployeesView: React.FC = () => {
           }),
         });
 
-        const data = await res.json();
+        const textResponse = await res.text();
+        let data: any = {};
+        try {
+          data = textResponse ? JSON.parse(textResponse) : {};
+        } catch {
+          throw new Error(textResponse || `Server error (status ${res.status})`);
+        }
+
         if (!res.ok) {
-          throw new Error(data.error || 'Failed to send Supabase Auth invitation email.');
+          throw new Error(data.error || `Failed to process invitation (status ${res.status}).`);
         }
 
         if (data.employee) {

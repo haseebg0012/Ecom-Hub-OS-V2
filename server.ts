@@ -2467,105 +2467,110 @@ app.post(
   requireServerAuth,
   requirePermission('employees.create'),
   async (req: AuthenticatedRequest, res: Response) => {
-    const { first_name, last_name, email, role, department, job_title, employment_type, phone, notes } = req.body;
+    try {
+      const { first_name, last_name, email, role, department, job_title, employment_type, phone, notes } = req.body;
 
-    if (!first_name || !last_name || !email) {
-      res.status(400).json({ error: 'First name, last name, and email are required.' });
-      return;
-    }
-
-    const emailTrim = email.trim().toLowerCase();
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(emailTrim)) {
-      res.status(400).json({ error: 'Please provide a valid email address format (e.g. employee@gmail.com).' });
-      return;
-    }
-
-    // Check duplicate employee email in this business
-    const existingEmp = (STORE.employees || []).find(
-      (e: any) => e.business_id === req.activeBusinessId && e.email.toLowerCase() === emailTrim
-    );
-    if (existingEmp) {
-      res.status(409).json({ error: `An employee with email "${emailTrim}" already exists in this organization.` });
-      return;
-    }
-
-    const fullName = `${first_name.trim()} ${last_name.trim()}`;
-    const assignedRole = role || 'Employee';
-
-    const adminClient = getSupabaseAdmin();
-    let authUserId = `usr-emp-${Date.now()}`;
-    const appUrl = getAppUrl(req);
-    const redirectTo = `${appUrl}/accept-invitation`;
-    let dispatchedLiveEmail = false;
-
-    if (adminClient) {
-      try {
-        const inviteRes = await adminClient.auth.admin.inviteUserByEmail(emailTrim, {
-          redirectTo,
-          data: {
-            first_name: first_name.trim(),
-            last_name: last_name.trim(),
-            business_id: req.activeBusinessId,
-            role: assignedRole,
-          }
-        });
-
-        if (!inviteRes.error && inviteRes.data?.user?.id) {
-          authUserId = inviteRes.data.user.id;
-          dispatchedLiveEmail = true;
-        } else if (inviteRes.error) {
-          console.warn('[Supabase Auth Invite Notice]:', inviteRes.error.message);
-        }
-      } catch (err: any) {
-        console.warn('[Supabase Admin Exception Handled]:', err?.message);
+      if (!first_name || !last_name || !email) {
+        res.status(400).json({ error: 'First name, last name, and email are required.' });
+        return;
       }
+
+      const emailTrim = email.trim().toLowerCase();
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(emailTrim)) {
+        res.status(400).json({ error: 'Please provide a valid email address format (e.g. employee@gmail.com).' });
+        return;
+      }
+
+      // Check duplicate employee email in this business
+      const existingEmp = (STORE.employees || []).find(
+        (e: any) => e.business_id === req.activeBusinessId && e.email.toLowerCase() === emailTrim
+      );
+      if (existingEmp) {
+        res.status(409).json({ error: `An employee with email "${emailTrim}" already exists in this organization.` });
+        return;
+      }
+
+      const fullName = `${first_name.trim()} ${last_name.trim()}`;
+      const assignedRole = role || 'Employee';
+
+      const adminClient = getSupabaseAdmin();
+      let authUserId = `usr-emp-${Date.now()}`;
+      const appUrl = getAppUrl(req);
+      const redirectTo = `${appUrl}/accept-invitation`;
+      let dispatchedLiveEmail = false;
+
+      if (adminClient) {
+        try {
+          const inviteRes = await adminClient.auth.admin.inviteUserByEmail(emailTrim, {
+            redirectTo,
+            data: {
+              first_name: first_name.trim(),
+              last_name: last_name.trim(),
+              business_id: req.activeBusinessId,
+              role: assignedRole,
+            }
+          });
+
+          if (!inviteRes.error && inviteRes.data?.user?.id) {
+            authUserId = inviteRes.data.user.id;
+            dispatchedLiveEmail = true;
+          } else if (inviteRes.error) {
+            console.warn('[Supabase Auth Invite Notice]:', inviteRes.error.message);
+          }
+        } catch (err: any) {
+          console.warn('[Supabase Admin Exception Handled]:', err?.message);
+        }
+      }
+
+      const newEmp = {
+        id: `emp-${Date.now()}`,
+        business_id: req.activeBusinessId!,
+        user_id: authUserId,
+        first_name: first_name.trim(),
+        last_name: last_name.trim(),
+        name: fullName,
+        email: emailTrim,
+        role: assignedRole,
+        department: department || 'Operations',
+        job_title: job_title || 'Team Member',
+        employment_type: employment_type || 'Full-Time',
+        phone: phone || '',
+        notes: notes || '',
+        status: 'Invited',
+        created_at: new Date().toISOString(),
+        last_login: null,
+      };
+
+      if (!STORE.employees) STORE.employees = [];
+      STORE.employees.push(newEmp);
+
+      DEMO_MEMBERS.push({
+        user_id: authUserId,
+        business_id: req.activeBusinessId!,
+        role: assignedRole as BusinessRole,
+      });
+
+      if (!STORE.activityLogs) STORE.activityLogs = [];
+      STORE.activityLogs.unshift({
+        id: `log-${Date.now()}`,
+        business_id: req.activeBusinessId!,
+        action: 'EMPLOYEE_INVITED',
+        description: `Invited employee ${fullName} (${emailTrim}) with role ${assignedRole}`,
+        created_at: new Date().toISOString(),
+      });
+
+      res.status(201).json({
+        success: true,
+        employee: newEmp,
+        message: dispatchedLiveEmail
+          ? `Secure invitation email successfully dispatched to ${emailTrim} via Supabase Auth.`
+          : `Employee profile created for ${fullName} (${emailTrim}) with role "${assignedRole}". Profile is active for task assignment.`
+      });
+    } catch (err: any) {
+      console.error('[Employee Invite Endpoint Exception]:', err);
+      res.status(500).json({ error: err?.message || 'Failed to process employee invitation.' });
     }
-
-    const newEmp = {
-      id: `emp-${Date.now()}`,
-      business_id: req.activeBusinessId!,
-      user_id: authUserId,
-      first_name: first_name.trim(),
-      last_name: last_name.trim(),
-      name: fullName,
-      email: emailTrim,
-      role: assignedRole,
-      department: department || 'Operations',
-      job_title: job_title || 'Team Member',
-      employment_type: employment_type || 'Full-Time',
-      phone: phone || '',
-      notes: notes || '',
-      status: 'Invited',
-      created_at: new Date().toISOString(),
-      last_login: null,
-    };
-
-    if (!STORE.employees) STORE.employees = [];
-    STORE.employees.push(newEmp);
-
-    DEMO_MEMBERS.push({
-      user_id: authUserId,
-      business_id: req.activeBusinessId!,
-      role: assignedRole as BusinessRole,
-    });
-
-    if (!STORE.activityLogs) STORE.activityLogs = [];
-    STORE.activityLogs.unshift({
-      id: `log-${Date.now()}`,
-      business_id: req.activeBusinessId!,
-      action: 'EMPLOYEE_INVITED',
-      description: `Invited employee ${fullName} (${emailTrim}) with role ${assignedRole}`,
-      created_at: new Date().toISOString(),
-    });
-
-    res.status(201).json({
-      success: true,
-      employee: newEmp,
-      message: dispatchedLiveEmail
-        ? `Secure invitation email successfully dispatched to ${emailTrim} via Supabase Auth.`
-        : `Employee profile created for ${fullName} (${emailTrim}) with role "${assignedRole}". Profile is active for task assignment.`
-    });
   }
 );
 
