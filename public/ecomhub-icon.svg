@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <defs>
+    <linearGradient id="eh-icon-grad" x1="4" y1="4" x2="60" y2="60" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#4F46E5"/>
+      <stop offset="100%" stop-color="#3730A3"/>
+    </linearGradient>
+    <linearGradient id="eh-node-glow" x1="16" y1="16" x2="48" y2="48" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#A5B4FC"/>
+      <stop offset="100%" stop-color="#818CF8"/>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="16" fill="url(#eh-icon-grad)"/>
+  <!-- Central Hub Isometric Facets -->
+  <path d="M32 14L48 23.2V41.6L32 50.8L16 41.6V23.2L32 14Z" stroke="#FFFFFF" stroke-width="3" stroke-linejoin="round" fill="none" opacity="0.95"/>
+  <path d="M32 14V32M48 41.6L32 32M16 41.6L32 32" stroke="#FFFFFF" stroke-width="3" stroke-linejoin="round" stroke-linecap="round" opacity="0.95"/>
+  <circle cx="32" cy="32" r="4" fill="#FFFFFF"/>
+  <circle cx="32" cy="14" r="2.8" fill="url(#eh-node-glow)"/>
+  <circle cx="48" cy="23.2" r="2.8" fill="url(#eh-node-glow)"/>
+  <circle cx="48" cy="41.6" r="2.8" fill="url(#eh-node-glow)"/>
+  <circle cx="32" cy="50.8" r="2.8" fill="url(#eh-node-glow)"/>
+  <circle cx="16" cy="41.6" r="2.8" fill="url(#eh-node-glow)"/>
+  <circle cx="16" cy="23.2" r="2.8" fill="url(#eh-node-glow)"/>
+</svg>

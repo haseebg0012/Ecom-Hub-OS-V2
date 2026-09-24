@@ -1,0 +1,8 @@
+{
+  "name": "Remix EcomHub OS",
+  "description": "A modern Business Operating System designed to bring business management, CRM, finance, employees, projects, documents, analytics, and leads into one unified platform.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
