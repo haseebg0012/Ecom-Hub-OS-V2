@@ -190,9 +190,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const navigationGroups = allNavigationGroups
     .map((group) => ({
       ...group,
-      items: group.items.filter((item) =>
-        item.requiredPermission ? can(item.requiredPermission) : true
-      ),
+      items: group.items.filter((item) => {
+        if (item.id === 'login-history') {
+          return activeBusiness?.role === 'Owner' || activeBusiness?.role === 'Admin' || activeBusiness?.role === 'Finance';
+        }
+        return item.requiredPermission ? can(item.requiredPermission) : true;
+      }),
     }))
     .filter((group) => group.items.length > 0);
 

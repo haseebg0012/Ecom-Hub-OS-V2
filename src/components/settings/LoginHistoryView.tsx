@@ -62,8 +62,8 @@ export const LoginHistoryView: React.FC<LoginHistoryViewProps> = ({
   const [currentPage, setCurrentPage] = useState(1);
   const pageSize = 12;
 
-  // Authorization check: Only Owner and Admin
-  const isAuthorized = activeBusiness?.role === 'Owner' || activeBusiness?.role === 'Admin' || can('team_roles.view');
+  // Authorization check: Owner, Admin, and Finance
+  const isAuthorized = activeBusiness?.role === 'Owner' || activeBusiness?.role === 'Admin' || activeBusiness?.role === 'Finance' || can('team_roles.view');
 
   const loadSessions = useCallback(async () => {
     if (!activeBusiness?.id) return;
