@@ -311,15 +311,17 @@ export const AuthPage: React.FC = () => {
           <div className="mt-6 pt-5 border-t border-[#E2E8F0] text-center">
             {mode === 'login' && (
               <p className="text-xs text-[#64748B]">
-                Don't have an account yet?{' '}
+                Forgot your password?{' '}
                 <button
-                  onClick={() => switchMode('signup')}
+                  type="button"
+                  onClick={() => switchMode('forgot_password')}
                   className="font-semibold text-[#4F46E5] hover:text-[#4338CA]"
                 >
-                  Create business account
+                  Reset password
                 </button>
               </p>
             )}
+
 
             {mode === 'signup' && (
               <p className="text-xs text-[#64748B]">
