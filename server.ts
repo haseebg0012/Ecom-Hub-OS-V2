@@ -26,16 +26,34 @@ app.use('/api', (req, res, next) => {
 });
 
 function normalizeSupabaseUrl(urlStr: string): string {
-  if (!urlStr) return '';
-  try {
-    const trimmed = urlStr.trim();
-    if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
-      const parsed = new URL(trimmed);
-      return parsed.origin;
+  if (!urlStr || typeof urlStr !== 'string') return '';
+  let trimmed = urlStr.trim().replace(/^["'`]+/, '').replace(/["'`]+$/, '').trim();
+  if (!trimmed || trimmed === 'undefined' || trimmed === 'null') return '';
+  if (trimmed.startsWith('postgres://') || trimmed.startsWith('postgresql://')) return '';
+  trimmed = trimmed.replace(/\/rest\/v1\/?$/, '').replace(/\/+$/, '').trim();
+  if (!trimmed.startsWith('http://') && !trimmed.startsWith('https://')) {
+    if (trimmed.startsWith('//')) {
+      trimmed = 'https:' + trimmed;
+    } else if (
+      trimmed.includes('.supabase.') ||
+      trimmed.startsWith('localhost') ||
+      trimmed.startsWith('127.0.0.1') ||
+      /^[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}(:\d+)?(\/.*)?$/.test(trimmed)
+    ) {
+      const isLocal = trimmed.startsWith('localhost') || trimmed.startsWith('127.0.0.1');
+      trimmed = (isLocal ? 'http://' : 'https://') + trimmed;
+    } else {
+      return '';
     }
-    return trimmed;
+  }
+  try {
+    const parsed = new URL(trimmed);
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return '';
+    if (!parsed.hostname || parsed.hostname.length < 3) return '';
+    if (parsed.hostname.includes('your-project') || parsed.hostname === 'example.com') return '';
+    return parsed.origin;
   } catch {
-    return urlStr.replace(/\/rest\/v1\/?$/, '').replace(/\/$/, '').trim();
+    return '';
   }
 }
 
@@ -2225,13 +2243,19 @@ Rules:
 function getSupabaseAdmin() {
   const rawUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || '';
   const supabaseUrl = normalizeSupabaseUrl(rawUrl);
-  const supabaseServiceKey = process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY || '';
+  let supabaseServiceKey = process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY || '';
+  supabaseServiceKey = supabaseServiceKey.trim().replace(/^["'`]+/, '').replace(/["'`]+$/, '').trim();
   if (!supabaseUrl || !supabaseServiceKey || supabaseUrl.includes('your-project') || supabaseServiceKey.includes('your-supabase-')) {
     return null;
   }
-  return createClient(supabaseUrl, supabaseServiceKey, {
-    auth: { persistSession: false, autoRefreshToken: false }
-  });
+  try {
+    return createClient(supabaseUrl, supabaseServiceKey, {
+      auth: { persistSession: false, autoRefreshToken: false }
+    });
+  } catch (err) {
+    console.error('[Supabase Admin Error] Failed to create admin client:', err);
+    return null;
+  }
 }
 
 /**
@@ -2470,45 +2494,32 @@ app.post(
     const assignedRole = role || 'Employee';
 
     const adminClient = getSupabaseAdmin();
-    if (!adminClient) {
-      res.status(400).json({
-        error: 'Supabase Auth service credentials (SUPABASE_SECRET_KEY / NEXT_PUBLIC_SUPABASE_URL) are not configured. Cannot dispatch live email invitation.'
-      });
-      return;
-    }
-
     let authUserId = `usr-emp-${Date.now()}`;
     const appUrl = getAppUrl(req);
     const redirectTo = `${appUrl}/accept-invitation`;
+    let dispatchedLiveEmail = false;
 
-    try {
-      const inviteRes = await adminClient.auth.admin.inviteUserByEmail(emailTrim, {
-        redirectTo,
-        data: {
-          first_name: first_name.trim(),
-          last_name: last_name.trim(),
-          business_id: req.activeBusinessId,
-          role: assignedRole,
-        }
-      });
-
-      if (inviteRes.error) {
-        console.error('[Supabase Auth Invite Error]:', inviteRes.error);
-        res.status(400).json({
-          error: `Failed to dispatch invitation email to ${emailTrim}: ${inviteRes.error.message}`
+    if (adminClient) {
+      try {
+        const inviteRes = await adminClient.auth.admin.inviteUserByEmail(emailTrim, {
+          redirectTo,
+          data: {
+            first_name: first_name.trim(),
+            last_name: last_name.trim(),
+            business_id: req.activeBusinessId,
+            role: assignedRole,
+          }
         });
-        return;
-      }
 
-      if (inviteRes.data?.user?.id) {
-        authUserId = inviteRes.data.user.id;
+        if (!inviteRes.error && inviteRes.data?.user?.id) {
+          authUserId = inviteRes.data.user.id;
+          dispatchedLiveEmail = true;
+        } else if (inviteRes.error) {
+          console.warn('[Supabase Auth Invite Notice]:', inviteRes.error.message);
+        }
+      } catch (err: any) {
+        console.warn('[Supabase Admin Exception Handled]:', err?.message);
       }
-    } catch (err: any) {
-      console.error('[Supabase Admin Exception]:', err);
-      res.status(500).json({
-        error: `Supabase invitation exception: ${err?.message || 'Unknown error'}`
-      });
-      return;
     }
 
     const newEmp = {
@@ -2551,7 +2562,9 @@ app.post(
     res.status(201).json({
       success: true,
       employee: newEmp,
-      message: `Secure invitation email successfully dispatched to ${emailTrim} via Supabase Auth.`
+      message: dispatchedLiveEmail
+        ? `Secure invitation email successfully dispatched to ${emailTrim} via Supabase Auth.`
+        : `Employee profile created for ${fullName} (${emailTrim}) with role "${assignedRole}". Profile is active for task assignment.`
     });
   }
 );

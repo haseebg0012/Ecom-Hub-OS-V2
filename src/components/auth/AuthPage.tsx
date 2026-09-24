@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Loader2, ArrowRight, ShieldCheck, Mail, Lock, User, Building2, CheckCircle2 } from 'lucide-react';
+import { Loader2, ArrowRight, ShieldCheck, Mail, Lock, User, Building2, CheckCircle2, AlertTriangle } from 'lucide-react';
 import { useAuth } from '../../lib/auth-context';
+import { getSupabaseConfigStatus, isSupabaseConfigured } from '../../lib/supabase';
 
 type AuthMode = 'login' | 'signup' | 'forgot_password' | 'reset_password';
 
@@ -20,15 +21,16 @@ export const AuthPage: React.FC = () => {
   const [mode, setMode] = useState<AuthMode>(getAuthModeFromLocation);
 
   // Form fields
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [fullName, setFullName] = useState('');
-  const [businessName, setBusinessName] = useState('EcomHub Commerce');
+  const [email, setEmail] = useState('ecometrixhub@gmail.com');
+  const [password, setPassword] = useState('Admin1234!');
+  const [fullName, setFullName] = useState('Ecometrix Hub Admin');
+  const [businessName, setBusinessName] = useState('Ecometrix Hub');
 
   // State
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
+  const configStatus = getSupabaseConfigStatus();
 
   // Sync mode with URL popstate / hashchange for robust back/forward navigation
   useEffect(() => {
@@ -161,6 +163,29 @@ export const AuthPage: React.FC = () => {
               {mode === 'reset_password' && 'Enter your email to request a secure password reset link.'}
             </p>
           </div>
+
+          {!isSupabaseConfigured && (
+            <div className="mb-5 p-3.5 rounded-lg bg-amber-50 border border-amber-200 text-xs text-amber-900">
+              <div className="flex items-start gap-2.5">
+                <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                <div className="space-y-1.5 flex-1">
+                  <p className="font-semibold text-amber-900">
+                    Supabase Configuration Notice
+                  </p>
+                  <p className="text-amber-800 leading-relaxed">
+                    {configStatus.error || 'Supabase project credentials are missing or invalid.'}
+                  </p>
+                  <div className="bg-amber-100/70 p-2 rounded text-[11px] font-mono text-amber-950 space-y-0.5">
+                    <div>NEXT_PUBLIC_SUPABASE_URL=https://&lt;project&gt;.supabase.co</div>
+                    <div>NEXT_PUBLIC_SUPABASE_ANON_KEY=&lt;anon-key&gt;</div>
+                  </div>
+                  <p className="text-[11px] text-amber-700">
+                    On Vercel: Set these variables in Project Settings &rarr; Environment Variables, then redeploy.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
 
           {errorMessage && (
             <div className="mb-4 p-3 rounded-lg bg-red-50 border border-red-200 text-xs text-red-700">
@@ -297,13 +322,26 @@ export const AuthPage: React.FC = () => {
             </button>
 
             {mode === 'login' && (
-              <button
-                type="button"
-                onClick={() => bypassLogin()}
-                className="w-full flex items-center justify-center gap-2 py-2.5 px-4 border border-indigo-200 rounded-lg text-sm font-semibold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 transition-colors mt-2"
-              >
-                <span>🚀 Bypass Login (Instant Access)</span>
-              </button>
+              <div className="pt-2">
+                <button
+                  type="button"
+                  onClick={() => bypassLogin()}
+                  className="w-full flex items-center justify-center gap-2 py-2.5 px-4 border border-indigo-200 rounded-lg text-sm font-semibold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 transition-colors shadow-xs"
+                >
+                  <span>🚀 Instant Admin Login (ecometrixhub@gmail.com)</span>
+                </button>
+
+                <div className="mt-3 p-2.5 rounded-lg bg-slate-50 border border-slate-200 text-left">
+                  <div className="text-[11px] font-semibold text-slate-700 flex items-center justify-between mb-1">
+                    <span>👑 Business Owner Login</span>
+                    <span className="text-[10px] bg-indigo-100 text-indigo-700 px-1.5 py-0.2 rounded font-medium">Ready</span>
+                  </div>
+                  <div className="text-[11px] font-mono text-slate-600 space-y-0.5">
+                    <div>Email: <strong className="text-slate-800">ecometrixhub@gmail.com</strong></div>
+                    <div>Password: <strong className="text-slate-800">Admin1234!</strong> <span className="text-[10px] text-slate-400 font-sans">(or any pass)</span></div>
+                  </div>
+                </div>
+              </div>
             )}
           </form>
 

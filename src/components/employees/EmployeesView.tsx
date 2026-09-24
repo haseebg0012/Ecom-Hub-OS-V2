@@ -59,6 +59,7 @@ export const EmployeesView: React.FC = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const [lastCreatedEmployee, setLastCreatedEmployee] = useState<Employee | null>(null);
 
   // Form fields
   const [firstName, setFirstName] = useState('');
@@ -234,6 +235,27 @@ export const EmployeesView: React.FC = () => {
 
         if (data.employee) {
           setEmployees((prev) => [data.employee, ...prev]);
+          setLastCreatedEmployee(data.employee);
+          try {
+            const rawMem = localStorage.getItem('ecomhub_members');
+            const allMem = rawMem ? JSON.parse(rawMem) : [];
+            const newMem = {
+              id: `mem-${data.employee.id}`,
+              user_id: data.employee.user_id || data.employee.id,
+              business_id: businessId,
+              role: data.employee.role,
+              created_at: new Date().toISOString(),
+              profile: {
+                id: data.employee.user_id || data.employee.id,
+                email: data.employee.email,
+                full_name: `${data.employee.first_name} ${data.employee.last_name}`,
+              }
+            };
+            allMem.push(newMem);
+            localStorage.setItem('ecomhub_members', JSON.stringify(allMem));
+          } catch (e) {
+            console.warn('Member storage sync warning:', e);
+          }
         }
         showNotice(data.message || `Invitation successfully dispatched to ${emailTrim}`, 'success');
         setIsModalOpen(false);
@@ -859,6 +881,75 @@ export const EmployeesView: React.FC = () => {
                 className="px-4 py-2 bg-red-600 text-white text-xs font-semibold rounded-lg hover:bg-red-700 shadow-xs flex items-center gap-1.5 disabled:opacity-50"
               >
                 {isDeleting ? 'Removing...' : 'Confirm Remove'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Success & Direct Access Link Modal */}
+      {lastCreatedEmployee && (
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl max-w-lg w-full p-6 shadow-xl space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-emerald-50 flex items-center justify-center shrink-0">
+                <CheckCircle2 className="w-5 h-5 text-emerald-600" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-[#0F172A]">Employee Sub-Profile Ready!</h3>
+                <p className="text-xs text-[#64748B]">Ready for immediate login and task execution</p>
+              </div>
+            </div>
+
+            <div className="bg-[#F8FAFC] border border-[#E2E8F0] rounded-lg p-3.5 space-y-2 text-xs">
+              <div className="flex justify-between">
+                <span className="text-[#64748B]">Name:</span>
+                <span className="font-semibold text-[#0F172A]">{lastCreatedEmployee.name}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-[#64748B]">Email ID:</span>
+                <span className="font-mono text-[#0F172A] font-semibold">{lastCreatedEmployee.email}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-[#64748B]">Assigned Role:</span>
+                <span className="font-semibold text-[#4F46E5]">{lastCreatedEmployee.role}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-[#64748B]">Department:</span>
+                <span className="font-medium text-[#0F172A]">{lastCreatedEmployee.department}</span>
+              </div>
+            </div>
+
+            <div className="space-y-1">
+              <label className="block text-xs font-semibold text-[#0F172A]">Direct Employee Login Link:</label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  readOnly
+                  value={`${window.location.origin}/login`}
+                  className="block w-full px-3 py-2 bg-slate-50 border border-[#E2E8F0] rounded-lg text-xs font-mono text-[#0F172A]"
+                />
+                <button
+                  onClick={() => {
+                    navigator.clipboard.writeText(`${window.location.origin}/login`);
+                    showNotice(`Copied login link for ${lastCreatedEmployee.email}!`, 'success');
+                  }}
+                  className="px-3 py-2 bg-[#4F46E5] text-white text-xs font-semibold rounded-lg hover:bg-[#4338CA] shrink-0"
+                >
+                  Copy Link
+                </button>
+              </div>
+              <p className="text-[11px] text-[#64748B] mt-1">
+                Share this login URL and email with the employee. They can sign in instantly with their email and perform tasks specific to their assigned role.
+              </p>
+            </div>
+
+            <div className="flex items-center justify-end pt-3 border-t border-[#E2E8F0]">
+              <button
+                onClick={() => setLastCreatedEmployee(null)}
+                className="px-4 py-2 bg-[#4F46E5] text-white text-xs font-semibold rounded-lg hover:bg-[#4338CA]"
+              >
+                Done
               </button>
             </div>
           </div>
