@@ -60,6 +60,7 @@ export const EmployeesView: React.FC = () => {
   const [formError, setFormError] = useState<string | null>(null);
   const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const [lastCreatedEmployee, setLastCreatedEmployee] = useState<Employee | null>(null);
+  const [loginLinkUrl, setLoginLinkUrl] = useState('https://ecomhubsystem.vercel.app/login');
 
   // Form fields
   const [firstName, setFirstName] = useState('');
@@ -236,6 +237,11 @@ export const EmployeesView: React.FC = () => {
         if (data.employee) {
           setEmployees((prev) => [data.employee, ...prev]);
           setLastCreatedEmployee(data.employee);
+          const currentOrigin = window.location.origin;
+          const defaultBase = currentOrigin.includes('run.app') || currentOrigin.includes('localhost')
+            ? 'https://ecomhubsystem.vercel.app'
+            : currentOrigin;
+          setLoginLinkUrl(`${defaultBase}/login`);
           try {
             const rawMem = localStorage.getItem('ecomhub_members');
             const allMem = rawMem ? JSON.parse(rawMem) : [];
@@ -688,13 +694,21 @@ export const EmployeesView: React.FC = () => {
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-[#0F172A] mb-1">Department</label>
-                  <input
-                    type="text"
+                  <select
                     value={department}
                     onChange={(e) => setDepartment(e.target.value)}
-                    placeholder="e.g. Sales & CRM"
-                    className="w-full px-3 py-2 border border-[#E2E8F0] rounded-lg text-xs text-[#0F172A] focus:outline-none focus:border-[#4F46E5]"
-                  />
+                    className="w-full px-3 py-2 border border-[#E2E8F0] rounded-lg text-xs text-[#0F172A] focus:outline-none focus:border-[#4F46E5] bg-white"
+                  >
+                    <option value="Customer Support">Customer Support</option>
+                    <option value="Engineering">Engineering</option>
+                    <option value="Executive">Executive</option>
+                    <option value="Finance">Finance</option>
+                    <option value="Human Resources">Human Resources</option>
+                    <option value="Legal">Legal</option>
+                    <option value="Marketing">Marketing</option>
+                    <option value="Operations">Operations</option>
+                    <option value="Sales & CRM">Sales & CRM</option>
+                  </select>
                 </div>
               </div>
 
@@ -925,13 +939,13 @@ export const EmployeesView: React.FC = () => {
               <div className="flex items-center gap-2">
                 <input
                   type="text"
-                  readOnly
-                  value={`${window.location.origin}/login`}
-                  className="block w-full px-3 py-2 bg-slate-50 border border-[#E2E8F0] rounded-lg text-xs font-mono text-[#0F172A]"
+                  value={loginLinkUrl}
+                  onChange={(e) => setLoginLinkUrl(e.target.value)}
+                  className="block w-full px-3 py-2 bg-white border border-[#E2E8F0] rounded-lg text-xs font-mono text-[#0F172A] focus:outline-none focus:border-[#4F46E5]"
                 />
                 <button
                   onClick={() => {
-                    navigator.clipboard.writeText(`${window.location.origin}/login`);
+                    navigator.clipboard.writeText(loginLinkUrl);
                     showNotice(`Copied login link for ${lastCreatedEmployee.email}!`, 'success');
                   }}
                   className="px-3 py-2 bg-[#4F46E5] text-white text-xs font-semibold rounded-lg hover:bg-[#4338CA] shrink-0"
