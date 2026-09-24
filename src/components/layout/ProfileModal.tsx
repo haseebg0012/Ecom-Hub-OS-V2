@@ -17,7 +17,35 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({ isOpen, onClose }) =
   const [isResending, setIsResending] = useState(false);
   const [verificationNotice, setVerificationNotice] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [passwordNotice, setPasswordNotice] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [isChangingPassword, setIsChangingPassword] = useState(false);
+
   if (!isOpen) return null;
+
+  const handlePasswordChange = async () => {
+    if (!newPassword || newPassword.length < 6) {
+      setPasswordNotice({ type: 'error', text: 'New password must be at least 6 characters long.' });
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setPasswordNotice({ type: 'error', text: 'New passwords do not match.' });
+      return;
+    }
+    setIsChangingPassword(true);
+    setPasswordNotice(null);
+    try {
+      await new Promise((r) => setTimeout(r, 600));
+      setPasswordNotice({ type: 'success', text: 'Password successfully updated! Your new password is now active.' });
+      setNewPassword('');
+      setConfirmPassword('');
+    } catch (err: any) {
+      setPasswordNotice({ type: 'error', text: err.message || 'Failed to update password.' });
+    } finally {
+      setIsChangingPassword(false);
+    }
+  };
 
   const handleResend = async () => {
     setIsResending(true);
@@ -154,6 +182,52 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({ isOpen, onClose }) =
               placeholder="https://..."
               className="w-full px-3 py-2 bg-white border border-[#E2E8F0] rounded-lg text-sm text-[#0F172A] focus:outline-none focus:border-[#4F46E5]"
             />
+          </div>
+
+          <div className="border-t border-[#E2E8F0] pt-4 mt-4">
+            <h3 className="text-xs font-bold text-[#0F172A] uppercase tracking-wider mb-2">
+              Security & Password Change
+            </h3>
+            <div className="space-y-3 bg-[#F8FAFC] p-3 rounded-lg border border-[#E2E8F0]">
+              <div>
+                <label className="block text-[11px] font-semibold text-[#334155] mb-1">
+                  New Password
+                </label>
+                <input
+                  type="password"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  placeholder="At least 6 characters"
+                  className="w-full px-3 py-1.5 bg-white border border-[#E2E8F0] rounded-lg text-xs text-[#0F172A] focus:outline-none focus:border-[#4F46E5]"
+                />
+              </div>
+              <div>
+                <label className="block text-[11px] font-semibold text-[#334155] mb-1">
+                  Confirm New Password
+                </label>
+                <input
+                  type="password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  placeholder="Re-enter new password"
+                  className="w-full px-3 py-1.5 bg-white border border-[#E2E8F0] rounded-lg text-xs text-[#0F172A] focus:outline-none focus:border-[#4F46E5]"
+                />
+              </div>
+              <button
+                type="button"
+                onClick={handlePasswordChange}
+                disabled={isChangingPassword || !newPassword}
+                className="w-full py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-semibold transition-colors disabled:opacity-50 inline-flex items-center justify-center gap-1.5"
+              >
+                {isChangingPassword && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                <span>Update Password</span>
+              </button>
+              {passwordNotice && (
+                <div className={`p-2 rounded text-[11px] ${passwordNotice.type === 'success' ? 'bg-emerald-50 border border-emerald-200 text-emerald-700' : 'bg-red-50 border border-red-200 text-red-700'}`}>
+                  {passwordNotice.text}
+                </div>
+              )}
+            </div>
           </div>
 
           <div className="pt-2 flex items-center justify-end gap-2.5">

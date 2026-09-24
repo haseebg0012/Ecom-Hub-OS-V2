@@ -2523,6 +2523,7 @@ app.post(
         }
       }
 
+      const tempPassword = 'Admin1234!';
       const newEmp = {
         id: `emp-${Date.now()}`,
         business_id: req.activeBusinessId!,
@@ -2537,6 +2538,7 @@ app.post(
         employment_type: employment_type || 'Full-Time',
         phone: phone || '',
         notes: notes || '',
+        temp_password: tempPassword,
         status: 'Invited',
         created_at: new Date().toISOString(),
         last_login: null,
