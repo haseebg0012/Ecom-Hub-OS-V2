@@ -510,7 +510,40 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       const rawMem = localStorage.getItem(LOCAL_STORAGE_MEMBERS_KEY);
       const allMembers: BusinessMember[] = rawMem ? JSON.parse(rawMem) : INITIAL_DEMO_MEMBERS;
-      const matchedMember = allMembers.find((m) => m.profile?.email?.toLowerCase() === cleanEmail);
+      let matchedMember = allMembers.find((m) => m.profile?.email?.toLowerCase() === cleanEmail);
+
+      if (!matchedMember) {
+        // Also check ecomhub_employees
+        try {
+          const rawEmps = localStorage.getItem('ecomhub_employees');
+          if (rawEmps) {
+            const emps = JSON.parse(rawEmps);
+            const foundEmp = emps.find((e: any) => e.email?.toLowerCase() === cleanEmail);
+            if (foundEmp) {
+              matchedMember = {
+                id: `mem-${foundEmp.id}`,
+                user_id: foundEmp.user_id || foundEmp.id,
+                business_id: foundEmp.business_id || 'biz-ecometrix-001',
+                role: foundEmp.role || 'Employee',
+                created_at: foundEmp.created_at || new Date().toISOString(),
+                profile: {
+                  id: foundEmp.user_id || foundEmp.id,
+                  email: foundEmp.email,
+                  full_name: foundEmp.name || `${foundEmp.first_name} ${foundEmp.last_name}`,
+                  avatar_url: null,
+                  created_at: foundEmp.created_at || new Date().toISOString(),
+                  updated_at: new Date().toISOString(),
+                }
+              };
+              allMembers.push(matchedMember);
+              localStorage.setItem(LOCAL_STORAGE_MEMBERS_KEY, JSON.stringify(allMembers));
+            }
+          }
+        } catch {
+          // ignore
+        }
+      }
+
       if (matchedMember) {
         const empProfile: Profile = {
           id: matchedMember.user_id,
@@ -548,7 +581,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     return {
       success: false,
-      error: 'Invalid credentials. For Owner login, use ecometrixhub@gmail.com. For employees, please use your invited email.'
+      error: 'Invalid email or password. Please verify your credentials or contact your organization administrator.'
     };
   };
 
