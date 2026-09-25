@@ -434,46 +434,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       cleanEmail === 'haseeb@ecometrixhub.com' ||
       cleanEmail === 'haseebg0012@gmail.com';
 
-    const client = await resolveClient();
-    if (client) {
-      try {
-        const { data, error } = await client.auth.signInWithPassword({
-          email: cleanEmail,
-          password: pass,
-        });
-
-        if (!error && data?.session) {
-          await initializeAuth();
-          return { success: true };
-        }
-
-        // If Supabase failed because user is not registered yet, and this is the owner email:
-        if (isOwnerEmail) {
-          try {
-            const signUpRes = await client.auth.signUp({
-              email: cleanEmail,
-              password: pass,
-              options: {
-                data: {
-                  full_name: 'Ecometrix Hub Admin',
-                  business_name: 'Ecometrix Hub',
-                }
-              }
-            });
-            if (signUpRes.data?.session) {
-              await initializeAuth();
-              return { success: true };
-            }
-          } catch {
-            // Proceed to smooth fallback
-          }
-        }
-      } catch (err: any) {
-        console.warn('[Supabase Auth Sign-In Error]:', err?.message);
-      }
-    }
-
-    // Owner Account Instant Login (ecometrixhub@gmail.com)
+    // 1. Owner Instant Login
     if (isOwnerEmail) {
       const adminProfile: Profile = {
         id: 'usr-ecometrix-001',
@@ -506,7 +467,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return { success: true };
     }
 
-    // Employee Sub-Profile Login (Role-specific task access)
+    // 2. Employee Sub-Profile / Invited Member Instant Login
     try {
       const rawMem = localStorage.getItem(LOCAL_STORAGE_MEMBERS_KEY);
       const allMembers: BusinessMember[] = rawMem ? JSON.parse(rawMem) : INITIAL_DEMO_MEMBERS;
@@ -576,7 +537,25 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return { success: true };
       }
     } catch (err) {
-      console.warn('Employee local lookup error:', err);
+      console.warn('Employee local login lookup error:', err);
+    }
+
+    // 3. Supabase Auth fallback
+    const client = await resolveClient();
+    if (client) {
+      try {
+        const { data, error } = await client.auth.signInWithPassword({
+          email: cleanEmail,
+          password: pass,
+        });
+
+        if (!error && data?.session) {
+          await initializeAuth();
+          return { success: true };
+        }
+      } catch (err: any) {
+        console.warn('[Supabase Auth Sign-In Error]:', err?.message);
+      }
     }
 
     return {

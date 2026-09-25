@@ -1,372 +1,342 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   ShieldCheck,
   UserPlus,
   Trash2,
   Check,
   X,
-  Loader2,
-  Mail,
+  Shield,
   User,
-  ShieldAlert,
-  Info,
+  Save,
+  Lock,
+  CheckCircle2,
+  AlertCircle
 } from 'lucide-react';
 import { useAuth } from '../../lib/auth-context';
-import { BusinessRole } from '../../types';
+import { BusinessRole, BusinessMember } from '../../types';
 
-const ROLES_LIST: { role: BusinessRole; description: string; badgeColor: string }[] = [
-  {
-    role: 'Owner',
-    description: 'Full organizational authority, billing, deletion, and membership management.',
-    badgeColor: 'bg-[#EEF2FF] text-[#4F46E5] border-[#C7D2FE]',
-  },
-  {
-    role: 'Admin',
-    description: 'Manage users, projects, leads, clients, and operational settings.',
-    badgeColor: 'bg-purple-50 text-purple-700 border-purple-200',
-  },
-  {
-    role: 'Manager',
-    description: 'Lead operational teams, assign projects, tasks, and supervise delivery.',
-    badgeColor: 'bg-blue-50 text-blue-700 border-blue-200',
-  },
-  {
-    role: 'Finance',
-    description: 'Access to financial ledger, invoices, expenses, payments, and audits.',
-    badgeColor: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-  },
-  {
-    role: 'Sales',
-    description: 'Manage prospect leads, client pipelines, and outbound opportunities.',
-    badgeColor: 'bg-amber-50 text-amber-700 border-amber-200',
-  },
-  {
-    role: 'Employee',
-    description: 'Standard operational team member working on assigned tasks and documents.',
-    badgeColor: 'bg-slate-100 text-slate-700 border-slate-200',
-  },
-  {
-    role: 'Viewer',
-    description: 'Read-only visibility for external advisors, stakeholders, or auditors.',
-    badgeColor: 'bg-zinc-100 text-zinc-600 border-zinc-200',
-  },
+interface RoleConfigItem {
+  key: string;
+  label: string;
+  role: BusinessRole;
+}
+
+const SYSTEM_ROLES: RoleConfigItem[] = [
+  { key: 'Owner', label: 'Owner / Master', role: 'Owner' },
+  { key: 'Admin', label: 'Business Admin', role: 'Admin' },
+  { key: 'Sales', label: 'Sales Representative', role: 'Sales' },
+  { key: 'Manager', label: 'Marketing Manager', role: 'Manager' },
+  { key: 'Finance', label: 'Finance Manager', role: 'Finance' },
+  { key: 'Employee', label: 'Employee Default', role: 'Employee' },
+  { key: 'Viewer', label: 'Stakeholder / Viewer', role: 'Viewer' },
 ];
+
+const MODULE_LIST = [
+  { id: 'crm', label: 'CRM & Pipelines' },
+  { id: 'tasks', label: 'Tasks Module' },
+  { id: 'projects', label: 'Projects & Operations' },
+  { id: 'analytics', label: 'Reporting & Analytics' },
+  { id: 'finance', label: 'Finance Dashboard' },
+  { id: 'documents', label: 'Documents & Files' },
+  { id: 'team_roles', label: 'Team & Settings' },
+];
+
+const ACTIONS = ['view', 'create', 'edit', 'delete', 'export'] as const;
 
 export const TeamRolesView: React.FC = () => {
   const { user, activeBusiness, members, inviteMember, updateMemberRole, removeMember } = useAuth();
-
-  const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
-  const [inviteEmail, setInviteEmail] = useState('');
-  const [inviteName, setInviteName] = useState('');
-  const [inviteRole, setInviteRole] = useState<BusinessRole>('Employee');
-  const [isSubmittingInvite, setIsSubmittingInvite] = useState(false);
-  const [statusNotice, setStatusNotice] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
-
-  const canManageTeam = activeBusiness?.role === 'Owner' || activeBusiness?.role === 'Admin';
-  const isOwner = activeBusiness?.role === 'Owner';
-
-  const handleInvite = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!inviteEmail.trim() || !inviteName.trim()) return;
-
-    setIsSubmittingInvite(true);
-    setStatusNotice(null);
-
-    const res = await inviteMember(inviteEmail.trim(), inviteName.trim(), inviteRole);
-    setIsSubmittingInvite(false);
-
-    if (res.success) {
-      setInviteEmail('');
-      setInviteName('');
-      setInviteRole('Employee');
-      setIsInviteModalOpen(false);
-      setStatusNotice({ type: 'success', text: `Successfully invited ${inviteName} as ${inviteRole}.` });
-      setTimeout(() => setStatusNotice(null), 3500);
-    } else {
-      setStatusNotice({ type: 'error', text: res.error || 'Failed to invite team member.' });
+  
+  const [selectedRoleKey, setSelectedRoleKey] = useState<string>('Sales');
+  const [rolePermissions, setRolePermissions] = useState<Record<string, Record<string, boolean>>>({
+    Sales: {
+      'crm.view': true, 'crm.create': true, 'crm.edit': true, 'crm.delete': false, 'crm.export': false,
+      'tasks.view': true, 'tasks.create': true, 'tasks.edit': true, 'tasks.delete': true, 'tasks.export': false,
+      'projects.view': true, 'projects.create': false, 'projects.edit': false, 'projects.delete': false, 'projects.export': false,
+      'analytics.view': true, 'analytics.create': false, 'analytics.edit': false, 'analytics.delete': false, 'analytics.export': false,
+      'finance.view': false, 'finance.create': false, 'finance.edit': false, 'finance.delete': false, 'finance.export': false,
+      'documents.view': true, 'documents.create': false, 'documents.edit': false, 'documents.delete': false, 'documents.export': false,
+      'team_roles.view': false, 'team_roles.create': false, 'team_roles.edit': false, 'team_roles.delete': false, 'team_roles.export': false,
+    },
+    Admin: {
+      'crm.view': true, 'crm.create': true, 'crm.edit': true, 'crm.delete': true, 'crm.export': true,
+      'tasks.view': true, 'tasks.create': true, 'tasks.edit': true, 'tasks.delete': true, 'tasks.export': true,
+      'projects.view': true, 'projects.create': true, 'projects.edit': true, 'projects.delete': true, 'projects.export': true,
+      'analytics.view': true, 'analytics.create': true, 'analytics.edit': true, 'analytics.delete': true, 'analytics.export': true,
+      'finance.view': true, 'finance.create': true, 'finance.edit': true, 'finance.delete': false, 'finance.export': true,
+      'documents.view': true, 'documents.create': true, 'documents.edit': true, 'documents.delete': true, 'documents.export': true,
+      'team_roles.view': true, 'team_roles.create': true, 'team_roles.edit': true, 'team_roles.delete': true, 'team_roles.export': true,
+    },
+    Manager: {
+      'crm.view': true, 'crm.create': true, 'crm.edit': true, 'crm.delete': false, 'crm.export': true,
+      'tasks.view': true, 'tasks.create': true, 'tasks.edit': true, 'tasks.delete': false, 'tasks.export': true,
+      'projects.view': true, 'projects.create': true, 'projects.edit': true, 'projects.delete': false, 'projects.export': true,
+      'analytics.view': true, 'analytics.create': false, 'analytics.edit': false, 'analytics.delete': false, 'analytics.export': true,
+      'finance.view': true, 'finance.create': false, 'finance.edit': false, 'finance.delete': false, 'finance.export': false,
+      'documents.view': true, 'documents.create': true, 'documents.edit': true, 'documents.delete': false, 'documents.export': false,
+      'team_roles.view': false, 'team_roles.create': false, 'team_roles.edit': false, 'team_roles.delete': false, 'team_roles.export': false,
+    },
+    Finance: {
+      'crm.view': true, 'crm.create': false, 'crm.edit': false, 'crm.delete': false, 'crm.export': true,
+      'tasks.view': true, 'tasks.create': false, 'tasks.edit': false, 'tasks.delete': false, 'tasks.export': false,
+      'projects.view': true, 'projects.create': false, 'projects.edit': false, 'projects.delete': false, 'projects.export': false,
+      'analytics.view': true, 'analytics.create': true, 'analytics.edit': true, 'analytics.delete': false, 'analytics.export': true,
+      'finance.view': true, 'finance.create': true, 'finance.edit': true, 'finance.delete': true, 'finance.export': true,
+      'documents.view': true, 'documents.create': true, 'documents.edit': true, 'documents.delete': false, 'documents.export': true,
+      'team_roles.view': false, 'team_roles.create': false, 'team_roles.edit': false, 'team_roles.delete': false, 'team_roles.export': false,
+    },
+    Employee: {
+      'crm.view': true, 'crm.create': false, 'crm.edit': false, 'crm.delete': false, 'crm.export': false,
+      'tasks.view': true, 'tasks.create': true, 'tasks.edit': true, 'tasks.delete': false, 'tasks.export': false,
+      'projects.view': true, 'projects.create': false, 'projects.edit': false, 'projects.delete': false, 'projects.export': false,
+      'analytics.view': false, 'analytics.create': false, 'analytics.edit': false, 'analytics.delete': false, 'analytics.export': false,
+      'finance.view': false, 'finance.create': false, 'finance.edit': false, 'finance.delete': false, 'finance.export': false,
+      'documents.view': true, 'documents.create': false, 'documents.edit': false, 'documents.delete': false, 'documents.export': false,
+      'team_roles.view': false, 'team_roles.create': false, 'team_roles.edit': false, 'team_roles.delete': false, 'team_roles.export': false,
+    },
+    Owner: {
+      'crm.view': true, 'crm.create': true, 'crm.edit': true, 'crm.delete': true, 'crm.export': true,
+      'tasks.view': true, 'tasks.create': true, 'tasks.edit': true, 'tasks.delete': true, 'tasks.export': true,
+      'projects.view': true, 'projects.create': true, 'projects.edit': true, 'projects.delete': true, 'projects.export': true,
+      'analytics.view': true, 'analytics.create': true, 'analytics.edit': true, 'analytics.delete': true, 'analytics.export': true,
+      'finance.view': true, 'finance.create': true, 'finance.edit': true, 'finance.delete': true, 'finance.export': true,
+      'documents.view': true, 'documents.create': true, 'documents.edit': true, 'documents.delete': true, 'documents.export': true,
+      'team_roles.view': true, 'team_roles.create': true, 'team_roles.edit': true, 'team_roles.delete': true, 'team_roles.export': true,
+    },
+    Viewer: {
+      'crm.view': true, 'crm.create': false, 'crm.edit': false, 'crm.delete': false, 'crm.export': false,
+      'tasks.view': true, 'tasks.create': false, 'tasks.edit': false, 'tasks.delete': false, 'tasks.export': false,
+      'projects.view': true, 'projects.create': false, 'projects.edit': false, 'projects.delete': false, 'projects.export': false,
+      'analytics.view': true, 'analytics.create': false, 'analytics.edit': false, 'analytics.delete': false, 'analytics.export': false,
+      'finance.view': true, 'finance.create': false, 'finance.edit': false, 'finance.delete': false, 'finance.export': false,
+      'documents.view': true, 'documents.create': false, 'documents.edit': false, 'documents.delete': false, 'documents.export': false,
+      'team_roles.view': false, 'team_roles.create': false, 'team_roles.edit': false, 'team_roles.delete': false, 'team_roles.export': false,
     }
-  };
+  });
 
-  const handleRoleChange = async (memberId: string, newRole: BusinessRole) => {
-    if (!canManageTeam) return;
-    const res = await updateMemberRole(memberId, newRole);
-    if (res.success) {
-      setStatusNotice({ type: 'success', text: 'Member role updated.' });
-      setTimeout(() => setStatusNotice(null), 2500);
-    } else {
-      setStatusNotice({ type: 'error', text: res.error || 'Failed to update role.' });
-    }
-  };
+  const [statusMessage, setStatusMessage] = useState<string | null>(null);
 
-  const handleRemove = async (memberId: string, memberName: string) => {
-    if (!canManageTeam) return;
-    if (window.confirm(`Are you sure you want to remove ${memberName} from this business?`)) {
-      const res = await removeMember(memberId);
-      if (res.success) {
-        setStatusNotice({ type: 'success', text: `${memberName} was removed from this business.` });
-        setTimeout(() => setStatusNotice(null), 2500);
-      } else {
-        setStatusNotice({ type: 'error', text: res.error || 'Failed to remove member.' });
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('ecomhub_role_matrix');
+      if (saved) {
+        setRolePermissions(JSON.parse(saved));
       }
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  const handleTogglePermission = (modId: string, action: string) => {
+    const key = `${modId}.${action}`;
+    setRolePermissions((prev) => {
+      const currentRolePerms = prev[selectedRoleKey] || {};
+      const updated = {
+        ...prev,
+        [selectedRoleKey]: {
+          ...currentRolePerms,
+          [key]: !currentRolePerms[key],
+        },
+      };
+      return updated;
+    });
+  };
+
+  const handleSaveMatrix = () => {
+    try {
+      localStorage.setItem('ecomhub_role_matrix', JSON.stringify(rolePermissions));
+      setStatusMessage(`Permissions matrix saved successfully for ${selectedRoleKey}!`);
+      setTimeout(() => setStatusMessage(null), 3000);
+    } catch (e: any) {
+      setStatusMessage('Error saving matrix.');
     }
   };
+
+  const currentRoleObj = SYSTEM_ROLES.find((r) => r.key === selectedRoleKey) || SYSTEM_ROLES[2];
+  const assignedMembers = members.filter((m) => m.role === currentRoleObj.role);
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-4 border-b border-[#E2E8F0]">
+    <div className="max-w-7xl mx-auto p-6 space-y-6">
+      {/* Top Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-4 border-b border-[#2D3748]">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-[#EEF2FF] text-[#4F46E5] flex items-center justify-center">
+          <div className="w-10 h-10 rounded-xl bg-indigo-500/10 text-indigo-400 flex items-center justify-center border border-indigo-500/20">
             <ShieldCheck className="w-5 h-5" />
           </div>
           <div>
-            <h1 className="text-xl font-bold text-[#0F172A] tracking-tight">
-              Team & Roles
+            <h1 className="text-xl font-bold text-white tracking-tight">
+              Roles & Access Management
             </h1>
-            <p className="text-xs text-[#64748B]">
-              Manage members and role permissions for <strong className="text-[#0F172A]">{activeBusiness?.name}</strong>.
+            <p className="text-xs text-slate-400">
+              Customize module permissions and assign operational rules for <strong className="text-white">{activeBusiness?.name}</strong>.
             </p>
           </div>
         </div>
 
-        {canManageTeam && (
-          <button
-            onClick={() => setIsInviteModalOpen(true)}
-            className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-medium text-white bg-[#4F46E5] hover:bg-[#4338CA] rounded-lg shadow-xs transition-colors self-start sm:self-auto"
-          >
-            <UserPlus className="w-3.5 h-3.5" />
-            <span>Invite Team Member</span>
-          </button>
+        {statusMessage && (
+          <div className="px-4 py-2 bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs rounded-lg flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+            <span>{statusMessage}</span>
+          </div>
         )}
       </div>
 
-      {statusNotice && (
-        <div
-          className={`p-3.5 rounded-lg text-xs flex items-center gap-2 ${
-            statusNotice.type === 'success'
-              ? 'bg-green-50 border border-green-200 text-green-800'
-              : 'bg-red-50 border border-red-200 text-red-800'
-          }`}
-        >
-          {statusNotice.type === 'success' && <Check className="w-4 h-4 text-green-600" />}
-          <span>{statusNotice.text}</span>
-        </div>
-      )}
-
-      {/* Members Table */}
-      <div className="bg-white rounded-xl border border-[#E2E8F0] shadow-xs overflow-hidden">
-        <div className="px-5 py-4 border-b border-[#E2E8F0] flex items-center justify-between">
-          <h2 className="text-xs font-semibold text-[#94A3B8] uppercase tracking-wider">
-            Active Members ({members.length})
-          </h2>
-          <span className="text-xs text-[#64748B]">
-            Tenant: {activeBusiness?.name}
-          </span>
-        </div>
-
-        <div className="divide-y divide-[#E2E8F0]">
-          {members.map((member) => {
-            const isCurrentUser = member.user_id === user?.id;
-            const memberRoleConfig = ROLES_LIST.find((r) => r.role === member.role);
-
-            return (
-              <div
-                key={member.id}
-                className="p-4 sm:px-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-[#F8FAFC] transition-colors"
-              >
-                <div className="flex items-center gap-3 min-w-0">
-                  <div className="w-9 h-9 rounded-full bg-[#EEF2FF] text-[#4F46E5] flex items-center justify-center font-medium text-sm shrink-0 border border-[#E2E8F0]">
-                    {member.profile?.full_name ? member.profile.full_name.charAt(0).toUpperCase() : 'M'}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+        {/* Left Column: Vertical Role Selector */}
+        <div className="lg:col-span-4 bg-[#141B2D] border border-slate-800 rounded-xl p-4 space-y-2 shadow-sm">
+          <div className="px-3 pb-2 text-[11px] font-semibold text-slate-400 tracking-wider uppercase">
+            Select System Role
+          </div>
+          <div className="space-y-1">
+            {SYSTEM_ROLES.map((r) => {
+              const isSelected = selectedRoleKey === r.key;
+              const count = members.filter((m) => m.role === r.role).length;
+              return (
+                <button
+                  key={r.key}
+                  onClick={() => setSelectedRoleKey(r.key)}
+                  className={`w-full flex items-center justify-between px-4 py-3 rounded-xl text-sm font-medium transition-all ${
+                    isSelected
+                      ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30'
+                      : 'text-slate-300 hover:bg-slate-800/60 hover:text-white'
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <Shield className={`w-4 h-4 ${isSelected ? 'text-white' : 'text-slate-400'}`} />
+                    <span>{r.label}</span>
                   </div>
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2">
-                      <p className="text-sm font-semibold text-[#0F172A] truncate">
-                        {member.profile?.full_name || 'Team Member'}
-                      </p>
-                      {isCurrentUser && (
-                        <span className="px-1.5 py-0.2 text-[10px] font-medium bg-[#F1F5F9] text-[#64748B] rounded border border-[#E2E8F0]">
-                          You
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-xs text-[#64748B] truncate">
-                      {member.profile?.email || 'member@business.com'}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex items-center justify-between sm:justify-end gap-3 shrink-0">
-                  {/* Role Dropdown / Badge */}
-                  {canManageTeam && !isCurrentUser ? (
-                    <select
-                      value={member.role}
-                      onChange={(e) => handleRoleChange(member.id, e.target.value as BusinessRole)}
-                      className="px-2.5 py-1.5 bg-white border border-[#E2E8F0] rounded-lg text-xs font-medium text-[#0F172A] focus:outline-none focus:border-[#4F46E5]"
-                    >
-                      {ROLES_LIST.map((r) => (
-                        <option key={r.role} value={r.role}>
-                          {r.role}
-                        </option>
-                      ))}
-                    </select>
-                  ) : (
-                    <span
-                      className={`px-2.5 py-1 text-xs font-semibold rounded-md border ${
-                        memberRoleConfig?.badgeColor || 'bg-slate-100 text-slate-700'
-                      }`}
-                    >
-                      {member.role}
-                    </span>
-                  )}
-
-                  {/* Remove Button (Only Owner can remove others, or Admins if non-owner) */}
-                  {canManageTeam && !isCurrentUser && (
-                    <button
-                      onClick={() => handleRemove(member.id, member.profile?.full_name || 'Member')}
-                      title="Remove member from business"
-                      className="p-1.5 text-[#94A3B8] hover:text-[#DC2626] hover:bg-red-50 rounded-lg transition-colors"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  )}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* Role Hierarchy Reference Card */}
-      <div className="bg-white rounded-xl border border-[#E2E8F0] shadow-xs p-5 space-y-3">
-        <div className="flex items-center gap-2 pb-2 border-b border-[#E2E8F0]">
-          <Info className="w-4 h-4 text-[#4F46E5]" />
-          <h3 className="text-xs font-semibold text-[#0F172A] uppercase tracking-wider">
-            EcomHub OS Role Hierarchy & Permissions
-          </h3>
+                  <span className={`text-xs px-2 py-0.5 rounded-full ${
+                    isSelected ? 'bg-indigo-700 text-indigo-100' : 'bg-slate-800 text-slate-400'
+                  }`}>
+                    {count}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 pt-1">
-          {ROLES_LIST.map((r) => (
-            <div key={r.role} className="p-3 rounded-lg border border-[#E2E8F0] bg-[#F8FAFC]">
-              <div className="flex items-center justify-between mb-1">
-                <span className="text-xs font-bold text-[#0F172A]">{r.role}</span>
-                <span className={`text-[10px] px-1.5 py-0.5 rounded font-semibold border ${r.badgeColor}`}>
-                  {r.role}
-                </span>
-              </div>
-              <p className="text-[11px] text-[#64748B] leading-relaxed">
-                {r.description}
-              </p>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Invite Modal */}
-      {isInviteModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/30 backdrop-blur-xs">
-          <div className="bg-white rounded-xl border border-[#E2E8F0] shadow-xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in-95 duration-150">
-            <div className="px-6 py-4 border-b border-[#E2E8F0] flex items-center justify-between">
-              <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-lg bg-[#EEF2FF] text-[#4F46E5] flex items-center justify-center">
-                  <UserPlus className="w-4 h-4" />
-                </div>
-                <div>
-                  <h2 className="text-base font-semibold text-[#0F172A]">Invite Member</h2>
-                  <p className="text-xs text-[#64748B]">Add member to {activeBusiness?.name}</p>
-                </div>
+        {/* Right Column: Permissions Matrix & Assigned Members */}
+        <div className="lg:col-span-8 space-y-6">
+          {/* Permissions Matrix Box */}
+          <div className="bg-[#141B2D] border border-slate-800 rounded-xl p-6 space-y-6 shadow-sm">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-slate-800 pb-4">
+              <div>
+                <h2 className="text-base font-bold text-white">
+                  Permissions for '{currentRoleObj.label}'
+                </h2>
+                <p className="text-xs text-slate-400">
+                  Customize operational access rules and feature buttons for this role.
+                </p>
               </div>
               <button
-                onClick={() => setIsInviteModalOpen(false)}
-                className="text-[#94A3B8] hover:text-[#0F172A] p-1 rounded-md"
+                onClick={handleSaveMatrix}
+                className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold rounded-lg shadow-sm transition-colors self-start sm:self-auto"
               >
-                <X className="w-4 h-4" />
+                <Save className="w-3.5 h-3.5" />
+                <span>Save Matrix</span>
               </button>
             </div>
 
-            <form onSubmit={handleInvite} className="p-6 space-y-4">
-              <div>
-                <label className="block text-xs font-semibold text-[#0F172A] mb-1.5">
-                  Full Name *
-                </label>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-[#94A3B8]">
-                    <User className="w-4 h-4" />
+            {/* Matrix Table */}
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead>
+                  <tr className="border-b border-slate-800 text-slate-400 font-semibold tracking-wider uppercase">
+                    <th className="py-3 px-4">Module</th>
+                    <th className="py-3 px-3 text-center">View</th>
+                    <th className="py-3 px-3 text-center">Create</th>
+                    <th className="py-3 px-3 text-center">Edit</th>
+                    <th className="py-3 px-3 text-center">Delete</th>
+                    <th className="py-3 px-3 text-center">Export</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-800/60">
+                  {MODULE_LIST.map((mod) => {
+                    const currentPerms = rolePermissions[selectedRoleKey] || {};
+                    return (
+                      <tr key={mod.id} className="hover:bg-slate-800/30 transition-colors">
+                        <td className="py-3.5 px-4 font-medium text-slate-200">
+                          {mod.label}
+                        </td>
+                        {ACTIONS.map((action) => {
+                          const permKey = `${mod.id}.${action}`;
+                          const isActive = !!currentPerms[permKey];
+                          return (
+                            <td key={action} className="py-3.5 px-3 text-center">
+                              <label className="relative inline-flex items-center cursor-pointer justify-center">
+                                <input
+                                  type="checkbox"
+                                  checked={isActive}
+                                  onChange={() => handleTogglePermission(mod.id, action)}
+                                  className="sr-only peer"
+                                />
+                                <div className="w-9 h-5 bg-slate-700 peer-focus:outline-hidden rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-indigo-600"></div>
+                              </label>
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Assigned Team Members Box */}
+          <div className="bg-[#141B2D] border border-slate-800 rounded-xl p-6 space-y-4 shadow-sm">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <h3 className="text-sm font-bold text-white">
+                Assigned Team Members ({assignedMembers.length})
+              </h3>
+              <span className="text-xs text-slate-400">
+                Active in {currentRoleObj.label}
+              </span>
+            </div>
+
+            {assignedMembers.length === 0 ? (
+              <div className="text-center py-8 text-slate-500 text-xs">
+                No team members currently assigned to this role. Add members via Employees panel.
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {assignedMembers.map((m) => (
+                  <div
+                    key={m.id}
+                    className="flex items-center justify-between p-3.5 bg-slate-900/60 border border-slate-800 rounded-xl"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-9 h-9 rounded-full bg-indigo-500/20 text-indigo-300 font-bold flex items-center justify-center text-sm border border-indigo-500/30">
+                        {m.profile?.full_name?.charAt(0) || 'U'}
+                      </div>
+                      <div>
+                        <h4 className="text-sm font-semibold text-white">
+                          {m.profile?.full_name || 'Team Member'}
+                        </h4>
+                        <p className="text-xs text-slate-400">{m.profile?.email}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <span className="px-2.5 py-1 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[10px] font-bold rounded-md uppercase tracking-wider">
+                        Active
+                      </span>
+                      {activeBusiness?.role === 'Owner' && m.user_id !== user?.id && (
+                        <button
+                          onClick={() => removeMember(m.id)}
+                          className="p-1.5 text-slate-400 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
+                          title="Remove member"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
+                    </div>
                   </div>
-                  <input
-                    type="text"
-                    required
-                    value={inviteName}
-                    onChange={(e) => setInviteName(e.target.value)}
-                    placeholder="e.g. Alex Morgan"
-                    className="w-full pl-9 pr-3 py-2 bg-white border border-[#E2E8F0] rounded-lg text-sm text-[#0F172A] placeholder-[#94A3B8] focus:outline-none focus:border-[#4F46E5]"
-                  />
-                </div>
+                ))}
               </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-[#0F172A] mb-1.5">
-                  Email Address *
-                </label>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-[#94A3B8]">
-                    <Mail className="w-4 h-4" />
-                  </div>
-                  <input
-                    type="email"
-                    required
-                    value={inviteEmail}
-                    onChange={(e) => setInviteEmail(e.target.value)}
-                    placeholder="alex@company.com"
-                    className="w-full pl-9 pr-3 py-2 bg-white border border-[#E2E8F0] rounded-lg text-sm text-[#0F172A] placeholder-[#94A3B8] focus:outline-none focus:border-[#4F46E5]"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-[#0F172A] mb-1.5">
-                  Assigned Role
-                </label>
-                <select
-                  value={inviteRole}
-                  onChange={(e) => setInviteRole(e.target.value as BusinessRole)}
-                  className="w-full px-3 py-2 bg-white border border-[#E2E8F0] rounded-lg text-sm text-[#0F172A] focus:outline-none focus:border-[#4F46E5]"
-                >
-                  {ROLES_LIST.map((r) => (
-                    <option key={r.role} value={r.role}>
-                      {r.role} — {r.description.slice(0, 45)}...
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="pt-2 flex items-center justify-end gap-2.5">
-                <button
-                  type="button"
-                  onClick={() => setIsInviteModalOpen(false)}
-                  className="px-4 py-2 text-sm font-medium text-[#64748B] hover:text-[#0F172A] hover:bg-[#F1F5F9] rounded-lg transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={isSubmittingInvite}
-                  className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-white bg-[#4F46E5] hover:bg-[#4338CA] rounded-lg shadow-xs transition-colors disabled:opacity-50"
-                >
-                  {isSubmittingInvite ? (
-                    <>
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      <span>Inviting...</span>
-                    </>
-                  ) : (
-                    <span>Add Member</span>
-                  )}
-                </button>
-              </div>
-            </form>
+            )}
           </div>
         </div>
-      )}
+      </div>
     </div>
   );
 };

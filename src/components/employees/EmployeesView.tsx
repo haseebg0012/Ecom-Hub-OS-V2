@@ -832,9 +832,9 @@ export const EmployeesView: React.FC = () => {
                   className="px-4 py-2 bg-[#4F46E5] text-white text-xs font-medium rounded-lg hover:bg-[#4338CA] shadow-xs disabled:opacity-50 flex items-center gap-1.5"
                 >
                   {isSubmitting ? (
-                    <span>{editingEmployee ? 'Saving Changes...' : 'Sending Invitation...'}</span>
+                    <span>{editingEmployee ? 'Saving Changes...' : 'Adding Employee...'}</span>
                   ) : (
-                    <span>{editingEmployee ? 'Save Changes' : 'Send Invitation'}</span>
+                    <span>{editingEmployee ? 'Save Changes' : 'Add Employee'}</span>
                   )}
                 </button>
               </div>
