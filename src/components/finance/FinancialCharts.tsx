@@ -204,18 +204,41 @@ export const ProfitTrendLineChart: React.FC<{
           />
 
           {/* Data Points */}
-          {points.map((p, idx) => (
-            <g key={idx} className="cursor-pointer">
-              <circle
-                cx={p.x}
-                cy={p.y}
-                r="4.5"
-                className="fill-white stroke-[#4F46E5] stroke-[2.5px] hover:scale-150 transition-transform"
+          {points.map((p, idx) => {
+            const isHovered = hoveredPoint?.label === p.data.label && hoveredPoint?.profit === p.data.profit;
+            return (
+              <g
+                key={idx}
+                className="cursor-pointer"
                 onMouseEnter={() => setHoveredPoint(p.data)}
                 onMouseLeave={() => setHoveredPoint(null)}
-              />
-            </g>
-          ))}
+              >
+                {/* Outer highlight ring when hovered */}
+                {isHovered && (
+                  <circle
+                    cx={p.x}
+                    cy={p.y}
+                    r="9"
+                    className="fill-[#4F46E5]/20 stroke-[#4F46E5] stroke-[1px]"
+                  />
+                )}
+                {/* Visible data point */}
+                <circle
+                  cx={p.x}
+                  cy={p.y}
+                  r={isHovered ? "6" : "4.5"}
+                  className="fill-white stroke-[#4F46E5] stroke-[2.5px] transition-all duration-150"
+                />
+                {/* Invisible larger hit target for smooth hover without jitter */}
+                <circle
+                  cx={p.x}
+                  cy={p.y}
+                  r="14"
+                  fill="transparent"
+                />
+              </g>
+            );
+          })}
         </svg>
 
         {/* Labels row */}

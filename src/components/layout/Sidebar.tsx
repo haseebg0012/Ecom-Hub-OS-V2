@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   LayoutDashboard,
   Users,
@@ -100,9 +100,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
           requiredPermission: 'tasks.view',
         },
         {
-          id: 'employees',
-          label: 'Employees',
-          icon: UserCheck,
+          id: 'team-members-roles',
+          label: 'Team Members & Roles',
+          icon: Users,
           requiredPermission: 'employees.view',
         },
       ],
@@ -164,12 +164,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           badge: 'Public',
           requiredPermission: 'leads.view',
         },
-        {
-          id: 'team-roles',
-          label: 'Team & Roles',
-          icon: ShieldCheck,
-          requiredPermission: 'team_roles.view',
-        },
+
         {
           id: 'login-history',
           label: 'Login History',
@@ -186,13 +181,58 @@ export const Sidebar: React.FC<SidebarProps> = ({
     },
   ];
 
-  // Dynamically filter navigation items based on the active user's permissions (Layer 1)
+  // Dynamically filter navigation items based on active user permissions and role UI visibility
+  const [uiVisTick, setUiVisTick] = useState(0);
+
+  useEffect(() => {
+    const handleSync = () => setUiVisTick((t) => t + 1);
+    window.addEventListener('ecomhub_ui_role_visibility_updated', handleSync);
+    window.addEventListener('ecomhub_role_matrix_updated', handleSync);
+    window.addEventListener('ecomhub_employees_updated', handleSync);
+    window.addEventListener('storage', handleSync);
+    return () => {
+      window.removeEventListener('ecomhub_ui_role_visibility_updated', handleSync);
+      window.removeEventListener('ecomhub_role_matrix_updated', handleSync);
+      window.removeEventListener('ecomhub_employees_updated', handleSync);
+      window.removeEventListener('storage', handleSync);
+    };
+  }, []);
+
+  const rawUiVis = localStorage.getItem('ecomhub_ui_role_visibility');
+  const uiVisMap = rawUiVis ? JSON.parse(rawUiVis) : {};
+  const currentRoles = activeBusiness?.roles || (activeBusiness?.role ? [activeBusiness.role] : ['Viewer']);
+
+  const isItemVisible = (itemId: string) => {
+    if (currentRoles.includes('Owner')) return true;
+
+    // For multiple roles: if ANY role explicitly allows the item, show it!
+    let anyAllowed = false;
+    let anyDenied = false;
+
+    for (const r of currentRoles) {
+      if (uiVisMap[r]) {
+        if (uiVisMap[r][itemId] === true) {
+          anyAllowed = true;
+          break;
+        } else if (uiVisMap[r][itemId] === false) {
+          anyDenied = true;
+        }
+      }
+    }
+
+    if (anyAllowed) return true;
+    if (anyDenied) return false;
+
+    return true;
+  };
+
   const navigationGroups = allNavigationGroups
     .map((group) => ({
       ...group,
       items: group.items.filter((item) => {
+        if (!isItemVisible(item.id)) return false;
         if (item.id === 'login-history') {
-          return activeBusiness?.role === 'Owner' || activeBusiness?.role === 'Admin' || activeBusiness?.role === 'Finance';
+          return currentRoles.includes('Owner') || currentRoles.includes('Admin') || currentRoles.includes('Finance');
         }
         return item.requiredPermission ? can(item.requiredPermission) : true;
       }),

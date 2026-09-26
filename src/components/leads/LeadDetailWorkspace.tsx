@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   ArrowLeft,
   Phone,
@@ -51,10 +51,118 @@ export const LeadDetailWorkspace: React.FC<LeadDetailWorkspaceProps> = ({
     activities,
     convertLeadToClient,
     getExchangeRate,
+    addNotification,
   } = useCrm();
   const { user, members, activeBusiness } = useAuth();
 
   const [activeTab, setActiveTab] = useState<'overview' | 'calls' | 'followups' | 'notes' | 'timeline'>('overview');
+
+  // Load Operations specialists only
+  const [opsSpecialists, setOpsSpecialists] = useState<Array<{ id: string; name: string; email: string; role: string }>>([]);
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem('ecomhub_employees');
+      const list = raw ? JSON.parse(raw) : [];
+      const formatted: Array<{ id: string; name: string; email: string; role: string }> = [];
+
+      if (Array.isArray(list)) {
+        list.forEach((e: any) => {
+          const isOps =
+            e.role === 'Operations' ||
+            (Array.isArray(e.roles) && e.roles.includes('Operations')) ||
+            (typeof e.department === 'string' && e.department.toLowerCase().includes('operat')) ||
+            (typeof e.jobTitle === 'string' && e.jobTitle.toLowerCase().includes('operat'));
+
+          if (isOps) {
+            formatted.push({
+              id: e.id || e.email,
+              name: e.name || `${e.first_name || ''} ${e.last_name || ''}`.trim() || e.email,
+              email: e.email,
+              role: e.role || (e.roles && e.roles[0]) || 'Operations Specialist',
+            });
+          }
+        });
+      }
+
+      if (members && members.length > 0) {
+        members.forEach((m) => {
+          const isOps =
+            m.role === 'Operations' ||
+            (Array.isArray(m.roles) && m.roles.includes('Operations'));
+
+          if (isOps && !formatted.some((f) => f.id === m.user_id)) {
+            formatted.push({
+              id: m.user_id,
+              name: m.profile?.full_name || m.profile?.email || 'Operations Specialist',
+              email: m.profile?.email || '',
+              role: m.role || 'Operations Specialist',
+            });
+          }
+        });
+      }
+
+      setOpsSpecialists(formatted);
+    } catch {}
+  }, [members]);
+
+  const handleAssignSpecialist = async (specialistId: string) => {
+    if (!lead) return;
+    await updateLead(lead.id, { assigned_to: specialistId || null });
+
+    if (specialistId) {
+      const specialist = opsSpecialists.find((s) => s.id === specialistId);
+      const specialistName = specialist?.name || 'Operations Specialist';
+
+      // 1. Notification to the specialist
+      try {
+        await addNotification({
+          user_id: specialistId,
+          type: 'lead_capture',
+          title: `Lead & Task Assigned: ${lead.name}`,
+          message: `You have been assigned as the Operations Specialist for lead "${lead.name}" (${lead.company || 'Prospect'}). Service: ${lead.service || 'Operations'}.`,
+          link_section: 'leads',
+          entity_id: lead.id,
+        });
+      } catch {}
+
+      // 2. Automatically create & assign task in Tasks module
+      try {
+        const bizId = activeBusiness?.id || 'biz-default';
+        const taskKey = `ecomhub_tasks_${bizId}`;
+        const rawTasks = localStorage.getItem(taskKey);
+        const currentTasks = rawTasks ? JSON.parse(rawTasks) : [];
+        const newTask = {
+          id: `task-${Date.now()}`,
+          business_id: bizId,
+          title: `Operations & Follow Up: ${lead.name}${lead.company ? ` (${lead.company})` : ''}`,
+          status: 'Pending' as const,
+          priority: 'High' as const,
+          due_date: new Date(Date.now() + 86400000 * 2).toISOString().split('T')[0],
+          assignee: specialistName,
+        };
+        currentTasks.unshift(newTask);
+        localStorage.setItem(taskKey, JSON.stringify(currentTasks));
+        window.dispatchEvent(new Event('ecomhub_tasks_updated'));
+      } catch {}
+
+      // 3. Update employee tasks count in ecomhub_employees
+      try {
+        const rawEmps = localStorage.getItem('ecomhub_employees');
+        if (rawEmps) {
+          const emps = JSON.parse(rawEmps);
+          const updatedEmps = emps.map((emp: any) => {
+            if (emp.id === specialistId || emp.email === specialistId) {
+              return { ...emp, performedTasksCount: (emp.performedTasksCount || 0) + 1 };
+            }
+            return emp;
+          });
+          localStorage.setItem('ecomhub_employees', JSON.stringify(updatedEmps));
+          window.dispatchEvent(new Event('ecomhub_employees_updated'));
+        }
+      } catch {}
+    }
+  };
 
   // Currency Converter Modal State
   const [showConverter, setShowConverter] = useState(false);
@@ -351,20 +459,25 @@ export const LeadDetailWorkspace: React.FC<LeadDetailWorkspaceProps> = ({
 
         {/* Assignee */}
         <div className="p-4 rounded-xl bg-white border border-[#E2E8F0] shadow-2xs space-y-1">
-          <span className="text-xs text-[#64748B] block">Assigned Specialist</span>
+          <span className="text-xs text-[#64748B] block font-medium">Assigned Operations Specialist</span>
           <select
             value={lead.assigned_to || ''}
-            onChange={(e) => updateLead(lead.id, { assigned_to: e.target.value || null })}
-            className="w-full px-2 py-1 text-xs font-medium text-[#0F172A] bg-[#F8FAFC] border border-[#E2E8F0] rounded-lg focus:outline-none focus:border-[#4F46E5]"
+            onChange={(e) => handleAssignSpecialist(e.target.value)}
+            className="w-full px-2 py-1.5 text-xs font-medium text-[#0F172A] bg-[#F8FAFC] border border-[#E2E8F0] rounded-lg focus:outline-none focus:border-[#4F46E5]"
           >
             <option value="">-- Unassigned --</option>
-            {members.map((m) => (
-              <option key={m.user_id} value={m.user_id}>
-                {m.profile?.full_name || m.profile?.email} ({m.role})
+            {opsSpecialists.map((sp) => (
+              <option key={sp.id} value={sp.id}>
+                {sp.name} ({sp.role})
               </option>
             ))}
           </select>
-          <p className="text-[11px] text-[#94A3B8]">Responsible sales agent</p>
+          {opsSpecialists.length === 0 && (
+            <p className="text-[10px] text-amber-600 mt-1">
+              No Operations employees found. Add with role &quot;Operations&quot; in Team Members &amp; Roles.
+            </p>
+          )}
+          <p className="text-[11px] text-[#94A3B8]">Responsible Operations Specialist</p>
         </div>
 
         {/* Next Scheduled Follow-up */}

@@ -51,8 +51,8 @@ export const AccountsReceivableView: React.FC<AccountsReceivableViewProps> = ({
 
   // Filter open / unpaid invoices
   const openInvoices = useMemo(() => {
-    return invoices.filter(
-      (inv) => inv.status !== 'Paid' && inv.status !== 'Cancelled' && (Number(inv.balance_due) || 0) > 0.01
+    return (invoices || []).filter(
+      (inv) => inv?.status !== 'Paid' && inv?.status !== 'Cancelled' && (Number(inv?.balance_due) || 0) > 0.01
     );
   }, [invoices]);
 
@@ -440,7 +440,7 @@ export const AccountsReceivableView: React.FC<AccountsReceivableViewProps> = ({
             className="px-3 py-1.5 bg-white border border-[#E2E8F0] rounded-xl text-xs font-medium text-[#0F172A] focus:outline-none focus:border-[#4F46E5]"
           >
             <option value="All">All Clients</option>
-            {clients.map((c) => (
+            {(clients || []).map((c) => (
               <option key={c.id} value={c.id}>
                 {c.company_name}
               </option>
@@ -505,7 +505,7 @@ export const AccountsReceivableView: React.FC<AccountsReceivableViewProps> = ({
                 </tr>
               ) : (
                 filteredInvoices.map((inv) => {
-                  const client = clients.find((c) => c.id === inv.client_id);
+                  const client = (clients || []).find((c) => c.id === inv.client_id);
                   const isOverdue = inv.due_date < todayStr;
                   const daysOverdue = isOverdue ? getDaysOverdue(inv.due_date) : 0;
                   const rate = inv.currency === baseCurrency ? 1 : (inv.exchange_rate || getExchangeRate(inv.currency, baseCurrency));

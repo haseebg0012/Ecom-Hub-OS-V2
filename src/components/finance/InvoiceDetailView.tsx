@@ -241,17 +241,17 @@ export const InvoiceDetailView: React.FC<InvoiceDetailViewProps> = ({ invoiceId,
               </tr>
             </thead>
             <tbody className="divide-y divide-[#F1F5F9]">
-              {invoice.items.map((item, idx) => (
+              {(invoice.items || []).map((item, idx) => (
                 <tr key={idx} className="py-3">
                   <td className="py-3.5 pr-4 text-[#0F172A] font-medium">
-                    {item.description}
+                    {item?.description}
                   </td>
-                  <td className="py-3.5 text-center text-[#64748B]">{item.quantity}</td>
+                  <td className="py-3.5 text-center text-[#64748B]">{item?.quantity}</td>
                   <td className="py-3.5 text-right text-[#64748B]">
-                    {invoice.currency} {(item.unit_price || 0).toLocaleString()}
+                    {invoice.currency} {(Number(item?.unit_price) || 0).toLocaleString()}
                   </td>
                   <td className="py-3.5 text-right font-bold text-[#0F172A]">
-                    {invoice.currency} {(item.total_amount || 0).toLocaleString()}
+                    {invoice.currency} {(Number(item?.total_amount) || 0).toLocaleString()}
                   </td>
                 </tr>
               ))}
@@ -312,7 +312,7 @@ export const InvoiceDetailView: React.FC<InvoiceDetailViewProps> = ({ invoiceId,
               Payment Receipts Applied ({invoicePayments.length}):
             </span>
             <div className="space-y-2 text-xs">
-              {invoicePayments.map((p) => {
+              {(invoicePayments || []).map((p) => {
                 const isCancelled = p.status === 'Cancelled' || p.status === 'cancelled';
                 return (
                   <div

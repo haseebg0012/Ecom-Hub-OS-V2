@@ -23,35 +23,7 @@ export const TasksView: React.FC = () => {
     } catch {
       // fallback
     }
-    return [
-      {
-        id: 'task-001',
-        business_id: businessId,
-        title: 'Review Q1 Financial Audit & Reconcile Bank Statements',
-        status: 'Pending',
-        priority: 'High',
-        due_date: '2026-03-30',
-        assignee: 'Haseeb Gul',
-      },
-      {
-        id: 'task-002',
-        business_id: businessId,
-        title: 'Approve WhatsApp CRM Campaign sequence for North Star',
-        status: 'In Progress',
-        priority: 'Medium',
-        due_date: '2026-03-25',
-        assignee: 'Sara Ali',
-      },
-      {
-        id: 'task-003',
-        business_id: businessId,
-        title: 'Publish updated GDPR & privacy policy terms',
-        status: 'Completed',
-        priority: 'Low',
-        due_date: '2026-03-10',
-        assignee: 'Legal Team',
-      },
-    ];
+    return [];
   });
 
   const [searchTerm, setSearchTerm] = useState('');
@@ -60,7 +32,19 @@ export const TasksView: React.FC = () => {
   const [title, setTitle] = useState('');
   const [priority, setPriority] = useState<'High' | 'Medium' | 'Low'>('Medium');
   const [dueDate, setDueDate] = useState('');
-  const [assignee, setAssignee] = useState('Haseeb Gul');
+  const [assignee, setAssignee] = useState('Operations Specialist');
+
+  // Live reload tasks if updated elsewhere (e.g. from AddLeadModal)
+  useEffect(() => {
+    const handleUpdate = () => {
+      try {
+        const saved = localStorage.getItem(`ecomhub_tasks_${businessId}`);
+        if (saved) setTasks(JSON.parse(saved));
+      } catch {}
+    };
+    window.addEventListener('ecomhub_tasks_updated', handleUpdate);
+    return () => window.removeEventListener('ecomhub_tasks_updated', handleUpdate);
+  }, [businessId]);
 
   useEffect(() => {
     try {

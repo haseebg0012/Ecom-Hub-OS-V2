@@ -22,6 +22,30 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({ isOpen, onClose }) =
   const [passwordNotice, setPasswordNotice] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [isChangingPassword, setIsChangingPassword] = useState(false);
 
+  // Transition employee status from 'Added' to 'Profile Active' when opening profile
+  React.useEffect(() => {
+    if (isOpen && user?.email) {
+      try {
+        const rawEmps = localStorage.getItem('ecomhub_employees');
+        if (rawEmps) {
+          const emps = JSON.parse(rawEmps);
+          let changed = false;
+          const updated = emps.map((e: any) => {
+            if (e.email?.toLowerCase() === user.email.toLowerCase() && e.status === 'Added') {
+              changed = true;
+              return { ...e, status: 'Profile Active' };
+            }
+            return e;
+          });
+          if (changed) {
+            localStorage.setItem('ecomhub_employees', JSON.stringify(updated));
+            window.dispatchEvent(new Event('ecomhub_employees_updated'));
+          }
+        }
+      } catch {}
+    }
+  }, [isOpen, user?.email]);
+
   if (!isOpen) return null;
 
   const handlePasswordChange = async () => {

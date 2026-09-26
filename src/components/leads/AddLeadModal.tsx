@@ -16,7 +16,7 @@ export const AddLeadModal: React.FC<AddLeadModalProps> = ({
   onClose,
   onLeadAdded,
 }) => {
-  const { addLead, checkDuplicateLead } = useCrm();
+  const { addLead, checkDuplicateLead, addNotification, refreshCrmData } = useCrm();
   const { user, members, activeBusiness } = useAuth();
 
   const [name, setName] = useState('');
@@ -30,10 +30,65 @@ export const AddLeadModal: React.FC<AddLeadModalProps> = ({
   const [source, setSource] = useState('Cold Call');
   const [priority, setPriority] = useState<LeadPriority>('Medium');
   const [status, setStatus] = useState<LeadStatus>('New');
-  const [assignedTo, setAssignedTo] = useState(user?.id || '');
+  const [assignedTo, setAssignedTo] = useState('');
   const [message, setMessage] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  // Load specialists from ecomhub_employees and members
+  const [specialists, setSpecialists] = useState<Array<{ id: string; name: string; department: string; role: string }>>([]);
+
+  React.useEffect(() => {
+    if (!isOpen) return;
+    try {
+      const raw = localStorage.getItem('ecomhub_employees');
+      const list = raw ? JSON.parse(raw) : [];
+      const formatted: Array<{ id: string; name: string; department: string; role: string }> = [];
+
+      if (Array.isArray(list) && list.length > 0) {
+        list.forEach((e: any) => {
+          const isOps =
+            e.role === 'Operations' ||
+            (Array.isArray(e.roles) && e.roles.includes('Operations')) ||
+            (typeof e.department === 'string' && e.department.toLowerCase().includes('operat')) ||
+            (typeof e.jobTitle === 'string' && e.jobTitle.toLowerCase().includes('operat'));
+
+          if (isOps) {
+            formatted.push({
+              id: e.id || e.email,
+              name: e.name || `${e.first_name || ''} ${e.last_name || ''}`.trim() || e.email,
+              department: e.department || 'Operations',
+              role: e.role || (e.roles && e.roles[0]) || 'Operations Specialist',
+            });
+          }
+        });
+      }
+
+      // Also include members from auth if Operations role
+      if (members && members.length > 0) {
+        members.forEach((m) => {
+          const isOps =
+            m.role === 'Operations' ||
+            (Array.isArray(m.roles) && m.roles.includes('Operations'));
+
+          if (isOps && !formatted.some((f) => f.id === m.user_id)) {
+            formatted.push({
+              id: m.user_id,
+              name: m.profile?.full_name || m.profile?.email || 'Operations Specialist',
+              department: 'Operations',
+              role: m.role || 'Operations Specialist',
+            });
+          }
+        });
+      }
+
+      setSpecialists(formatted);
+      if (formatted.length > 0 && !assignedTo) {
+        // Default to first specialist if available
+        setAssignedTo(formatted[0].id);
+      }
+    } catch {}
+  }, [isOpen, members]);
 
   if (!isOpen) return null;
 
@@ -50,7 +105,7 @@ export const AddLeadModal: React.FC<AddLeadModalProps> = ({
     setIsSubmitting(true);
     setErrorMsg(null);
 
-    const res = await addLead({
+    const leadData = {
       name: name.trim(),
       company: company.trim() || null,
       email: email.trim() || null,
@@ -64,14 +119,57 @@ export const AddLeadModal: React.FC<AddLeadModalProps> = ({
       status,
       assigned_to: assignedTo || null,
       message: message.trim() || null,
-    });
+    };
 
-    setIsSubmitting(false);
+    const res = await addLead(leadData);
 
     if (res.success && res.lead) {
+      // Find assigned specialist details
+      const selectedSpecialist = specialists.find((s) => s.id === assignedTo);
+      const specialistName = selectedSpecialist?.name || 'Operations Specialist';
+
+      // 1. Notification to the specialist
+      if (assignedTo) {
+        try {
+          await addNotification({
+            user_id: assignedTo,
+            type: 'lead_capture',
+            title: 'New Lead Assigned to You',
+            message: `Lead "${leadData.name}" (${leadData.company || 'New Prospect'}) has been assigned to you for operations & outreach. Service: ${leadData.service || 'General'}. Budget: ${leadData.currency} ${leadData.budget || 0}.`,
+            link_section: 'leads',
+            entity_id: res.lead.id,
+          });
+        } catch {}
+
+        // 2. Automatically create and assign Task in Tasks module
+        try {
+          const bizId = activeBusiness?.id || 'biz-default';
+          const taskKey = `ecomhub_tasks_${bizId}`;
+          const rawTasks = localStorage.getItem(taskKey);
+          const currentTasks = rawTasks ? JSON.parse(rawTasks) : [];
+          const newTask = {
+            id: `task-${Date.now()}`,
+            business_id: bizId,
+            title: `Outreach & Follow Up: ${leadData.name}${leadData.company ? ` (${leadData.company})` : ''}`,
+            status: 'Pending' as const,
+            priority: (leadData.priority === 'Urgent' ? 'High' : leadData.priority || 'Medium') as 'High' | 'Medium' | 'Low',
+            due_date: new Date(Date.now() + 86400000 * 2).toISOString().split('T')[0],
+            assignee: specialistName,
+          };
+          currentTasks.unshift(newTask);
+          localStorage.setItem(taskKey, JSON.stringify(currentTasks));
+          window.dispatchEvent(new Event('ecomhub_tasks_updated'));
+        } catch (taskErr) {
+          console.warn('Error auto-creating task for lead:', taskErr);
+        }
+      }
+
+      await refreshCrmData();
+      setIsSubmitting(false);
       onClose();
       if (onLeadAdded) onLeadAdded(res.lead.id);
     } else {
+      setIsSubmitting(false);
       setErrorMsg(res.error || 'Failed to add lead.');
     }
   };
@@ -274,11 +372,17 @@ export const AddLeadModal: React.FC<AddLeadModalProps> = ({
                 onChange={(e) => setAssignedTo(e.target.value)}
                 className="w-full px-3 py-2 bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl font-medium text-[#0F172A] focus:outline-none focus:border-[#4F46E5]"
               >
-                {members.map((m) => (
-                  <option key={m.user_id} value={m.user_id}>
-                    {m.profile?.full_name || m.profile?.email}
+                <option value="">Select Operations Specialist...</option>
+                {specialists.map((sp) => (
+                  <option key={sp.id} value={sp.id}>
+                    {sp.name} — {sp.department || sp.role}
                   </option>
                 ))}
+                {specialists.length === 0 && (
+                  <option value="" disabled>
+                    No employees added yet (Add in Team Members & Roles)
+                  </option>
+                )}
               </select>
             </div>
           </div>

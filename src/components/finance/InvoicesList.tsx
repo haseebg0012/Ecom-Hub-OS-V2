@@ -37,7 +37,8 @@ export const InvoicesList: React.FC<InvoicesListProps> = ({
 
   // Filtered invoices
   const filteredInvoices = useMemo(() => {
-    return invoices.filter((inv) => {
+    return (invoices || []).filter((inv) => {
+      if (!inv) return false;
       // Status filter
       if (statusFilter !== 'All' && inv.status !== statusFilter) {
         return false;
@@ -49,9 +50,9 @@ export const InvoicesList: React.FC<InvoicesListProps> = ({
       // Search query
       if (searchQuery.trim()) {
         const query = searchQuery.toLowerCase();
-        const client = clients.find((c) => c.id === inv.client_id);
-        const matchNumber = inv.invoice_number.toLowerCase().includes(query);
-        const matchClient = client?.company_name.toLowerCase().includes(query);
+        const client = (clients || []).find((c) => c?.id === inv.client_id);
+        const matchNumber = (inv.invoice_number || '').toLowerCase().includes(query);
+        const matchClient = (client?.company_name || '').toLowerCase().includes(query);
         if (!matchNumber && !matchClient) {
           return false;
         }
@@ -62,15 +63,15 @@ export const InvoicesList: React.FC<InvoicesListProps> = ({
 
   // Aggregate totals
   const totalInvoiced = useMemo(
-    () => invoices.reduce((sum, i) => (i.status !== 'Cancelled' ? sum + i.total_amount : sum), 0),
+    () => (invoices || []).reduce((sum, i) => (i?.status !== 'Cancelled' ? sum + (Number(i?.total_amount) || 0) : sum), 0),
     [invoices]
   );
   const totalCollected = useMemo(
-    () => invoices.reduce((sum, i) => (i.status !== 'Cancelled' ? sum + i.paid_amount : sum), 0),
+    () => (invoices || []).reduce((sum, i) => (i?.status !== 'Cancelled' ? sum + (Number(i?.paid_amount) || 0) : sum), 0),
     [invoices]
   );
   const totalOutstanding = useMemo(
-    () => invoices.reduce((sum, i) => (i.status !== 'Cancelled' ? sum + i.balance_due : sum), 0),
+    () => (invoices || []).reduce((sum, i) => (i?.status !== 'Cancelled' ? sum + (Number(i?.balance_due) || 0) : sum), 0),
     [invoices]
   );
 
@@ -148,7 +149,7 @@ export const InvoicesList: React.FC<InvoicesListProps> = ({
             className="px-3 py-1.5 bg-white border border-[#E2E8F0] rounded-xl text-xs font-medium text-[#0F172A] focus:outline-none focus:border-[#4F46E5]"
           >
             <option value="All">All Clients</option>
-            {clients.map((c) => (
+            {(clients || []).map((c) => (
               <option key={c.id} value={c.id}>
                 {c.company_name}
               </option>
@@ -190,8 +191,8 @@ export const InvoicesList: React.FC<InvoicesListProps> = ({
                   </td>
                 </tr>
               ) : (
-                filteredInvoices.map((inv) => {
-                  const client = clients.find((c) => c.id === inv.client_id);
+                (filteredInvoices || []).map((inv) => {
+                  const client = (clients || []).find((c) => c.id === inv.client_id);
                   const progress =
                     inv.total_amount > 0 ? Math.min(100, Math.round((inv.paid_amount / inv.total_amount) * 100)) : 0;
                   const isOverdue =
@@ -235,13 +236,13 @@ export const InvoicesList: React.FC<InvoicesListProps> = ({
                       </td>
 
                       <td className="py-3.5 px-4 font-bold text-[#0F172A] whitespace-nowrap">
-                        {inv.currency} {inv.total_amount.toLocaleString()}
+                        {inv.currency} {(Number(inv.total_amount) || 0).toLocaleString()}
                       </td>
 
                       <td className="py-3.5 px-4 min-w-[140px]">
                         <div className="space-y-1">
                           <div className="flex justify-between text-[10px] text-[#64748B]">
-                            <span>Paid: {inv.currency} {inv.paid_amount.toLocaleString()}</span>
+                            <span>Paid: {inv.currency} {(Number(inv.paid_amount) || 0).toLocaleString()}</span>
                             <span>{progress}%</span>
                           </div>
                           <div className="w-full h-1.5 bg-[#F1F5F9] rounded-full overflow-hidden">
@@ -256,9 +257,9 @@ export const InvoicesList: React.FC<InvoicesListProps> = ({
                       </td>
 
                       <td className="py-3.5 px-4 font-bold whitespace-nowrap">
-                        {inv.balance_due > 0 ? (
+                        {(Number(inv.balance_due) || 0) > 0 ? (
                           <span className="text-[#4F46E5]">
-                            {inv.currency} {inv.balance_due.toLocaleString()}
+                            {inv.currency} {(Number(inv.balance_due) || 0).toLocaleString()}
                           </span>
                         ) : (
                           <span className="text-emerald-600 font-medium">Cleared</span>

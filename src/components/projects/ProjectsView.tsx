@@ -25,30 +25,7 @@ export const ProjectsView: React.FC = () => {
     } catch {
       // fallback
     }
-    return [
-      {
-        id: 'proj-001',
-        business_id: businessId,
-        name: 'Q1 Omnichannel Growth Strategy',
-        client_name: 'North Star Apparel Ltd.',
-        status: 'Active',
-        budget: 1500000,
-        currency: 'PKR',
-        deadline: '2026-03-31',
-        description: 'Complete multi-marketplace inventory sync and WhatsApp CRM automation.',
-      },
-      {
-        id: 'proj-002',
-        business_id: businessId,
-        name: 'Headless Shopify Plus Replatform',
-        client_name: 'Velocity D2C Brands',
-        status: 'Planning',
-        budget: 8500,
-        currency: 'USD',
-        deadline: '2026-05-15',
-        description: 'High-performance React storefront with instant server-side page loads.',
-      },
-    ];
+    return [];
   });
 
   const [searchTerm, setSearchTerm] = useState('');

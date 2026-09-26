@@ -105,7 +105,7 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
       { name: 'Projects', desc: 'Deliverables & budgets', section: 'projects' },
       { name: 'Finance', desc: 'Invoices, transactions & multi-currency', section: 'finance' },
       { name: 'Tasks', desc: 'Operational assignments & checklists', section: 'tasks' },
-      { name: 'Employees', desc: 'Team members & job titles', section: 'employees' },
+      { name: 'Team Members & Roles', desc: 'Staff directory, permissions & system roles', section: 'team-members-roles' },
       { name: 'Database Schema & RLS', desc: 'Architecture, migrations & security', section: 'database-schema' },
     ];
 

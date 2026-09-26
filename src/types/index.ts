@@ -9,6 +9,7 @@ export type BusinessRole =
   | 'Manager'
   | 'Finance'
   | 'Sales'
+  | 'Operations'
   | 'Employee'
   | 'Viewer';
 
@@ -40,12 +41,14 @@ export interface BusinessMember {
   user_id: string;
   business_id: string;
   role: BusinessRole;
+  roles?: BusinessRole[];
   created_at: string;
   profile?: Profile;
 }
 
 export interface BusinessWithRole extends Business {
   role: BusinessRole;
+  roles?: BusinessRole[];
   member_count?: number;
 }
 
@@ -62,7 +65,7 @@ export type ActiveNavSection =
   // OPERATIONS
   | 'projects'
   | 'tasks'
-  | 'employees'
+  | 'team-members-roles'
   // FINANCE
   | 'finance'
   | 'finance-recurring'
@@ -75,7 +78,6 @@ export type ActiveNavSection =
   | 'copilot'
   // SETTINGS
   | 'business-settings'
-  | 'team-roles'
   | 'login-history'
   | 'lead-entry-settings'
   | 'lead-agents'

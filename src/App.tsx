@@ -185,6 +185,49 @@ function AppContent() {
 }
 
 export default function App() {
+  // Fresh start wipe of dummy records across finances, leads, projects, clients, tasks, and employees
+  useEffect(() => {
+    try {
+      if (typeof window !== 'undefined' && !localStorage.getItem('ecomhub_fresh_clean_v4_all')) {
+        localStorage.setItem('ecomhub_leads', JSON.stringify([]));
+        localStorage.setItem('ecomhub_clients', JSON.stringify([]));
+        localStorage.setItem('ecomhub_client_contacts', JSON.stringify([]));
+        localStorage.setItem('ecomhub_client_notes', JSON.stringify([]));
+        localStorage.setItem('ecomhub_crm_activities', JSON.stringify([]));
+        localStorage.setItem('ecomhub_lead_followups', JSON.stringify([]));
+        localStorage.setItem('ecomhub_notifications', JSON.stringify([]));
+        localStorage.setItem('ecomhub_employees', JSON.stringify([]));
+        localStorage.setItem('ecomhub_members', JSON.stringify([]));
+
+        const keysToRemove: string[] = [];
+        for (let i = 0; i < localStorage.length; i++) {
+          const k = localStorage.key(i);
+          if (
+            k &&
+            (k.startsWith('ecomhub_invoices_') ||
+              k.startsWith('ecomhub_invoice_items_') ||
+              k.startsWith('ecomhub_payments_') ||
+              k.startsWith('ecomhub_expenses_') ||
+              k.startsWith('ecomhub_incomes_') ||
+              k.startsWith('ecomhub_investments_') ||
+              k.startsWith('ecomhub_recurring_') ||
+              k.startsWith('ecomhub_transactions_') ||
+              k.startsWith('ecomhub_tasks_') ||
+              k.startsWith('ecomhub_projects_'))
+          ) {
+            keysToRemove.push(k);
+          }
+        }
+        keysToRemove.forEach((k) => localStorage.removeItem(k));
+        localStorage.setItem('ecomhub_fresh_clean_v4_all', 'true');
+
+        window.dispatchEvent(new Event('ecomhub_leads_updated'));
+        window.dispatchEvent(new Event('ecomhub_employees_updated'));
+        window.dispatchEvent(new Event('ecomhub_tasks_updated'));
+      }
+    } catch {}
+  }, []);
+
   const [publicFormToken, setPublicFormToken] = useState<string | null>(() => getPublicLeadEntryToken());
   const [isAcceptInvite, setIsAcceptInvite] = useState<boolean>(() => checkIsAcceptInvitation());
   const [isAuthCallback, setIsAuthCallback] = useState<boolean>(() => checkIsAuthCallback());

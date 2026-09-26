@@ -105,7 +105,7 @@ export const EmployeesView: React.FC = () => {
       if (raw) {
         const parsed = JSON.parse(raw);
         if (Array.isArray(parsed)) {
-          setEmployees(parsed.filter((e: any) => e.business_id === businessId));
+          setEmployees(parsed.filter((e: any) => !e.business_id || e.business_id === businessId));
         }
       }
     } catch (e) {

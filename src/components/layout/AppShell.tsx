@@ -8,7 +8,7 @@ import { ClientsModuleView } from '../clients/ClientsModuleView';
 import { FinanceModuleView } from '../finance/FinanceModuleView';
 import { ProjectsView } from '../projects/ProjectsView';
 import { TasksView } from '../tasks/TasksView';
-import { EmployeesView } from '../employees/EmployeesView';
+import { TeamMembersRolesView } from '../employees/TeamMembersRolesView';
 import { DocumentsView } from '../documents/DocumentsView';
 import { AnalyticsView } from '../analytics/AnalyticsView';
 import { NotificationsView } from '../notifications/NotificationsView';
@@ -181,8 +181,8 @@ export const AppShell: React.FC = () => {
         return <ProjectsView />;
       case 'tasks':
         return <TasksView />;
-      case 'employees':
-        return <EmployeesView />;
+      case 'team-members-roles':
+        return <TeamMembersRolesView />;
       case 'documents':
         return <DocumentsView />;
       case 'analytics':
@@ -191,8 +191,6 @@ export const AppShell: React.FC = () => {
         return <NotificationsView />;
       case 'business-settings':
         return <BusinessSettingsView onNavigate={handleSelectSection} />;
-      case 'team-roles':
-        return <TeamRolesView onNavigate={handleSelectSection} />;
       case 'login-history':
         return <LoginHistoryView onNavigate={handleSelectSection} />;
       case 'copilot':

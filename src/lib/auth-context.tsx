@@ -103,44 +103,16 @@ const INITIAL_DEMO_MEMBERS: BusinessMember[] = [
     user_id: 'usr-ecometrix-001',
     business_id: 'biz-ecometrix-001',
     role: 'Owner',
+    roles: ['Owner', 'Admin'],
     created_at: new Date('2025-01-15T09:00:00Z').toISOString(),
     profile: INITIAL_DEMO_USER,
-  },
-  {
-    id: 'mem-002',
-    user_id: 'usr-colleague-002',
-    business_id: 'biz-ecometrix-001',
-    role: 'Admin',
-    created_at: new Date('2025-01-16T11:30:00Z').toISOString(),
-    profile: {
-      id: 'usr-colleague-002',
-      email: 'sarah.t@ecometrixhub.com',
-      full_name: 'Sarah Townsend',
-      avatar_url: null,
-      created_at: new Date('2025-01-16T11:30:00Z').toISOString(),
-      updated_at: new Date().toISOString(),
-    },
-  },
-  {
-    id: 'mem-003',
-    user_id: 'usr-colleague-003',
-    business_id: 'biz-ecometrix-001',
-    role: 'Finance',
-    created_at: new Date('2025-01-20T14:15:00Z').toISOString(),
-    profile: {
-      id: 'usr-colleague-003',
-      email: 'marcus.v@ecometrixhub.com',
-      full_name: 'Marcus Vance',
-      avatar_url: null,
-      created_at: new Date('2025-01-20T14:15:00Z').toISOString(),
-      updated_at: new Date().toISOString(),
-    },
   },
   {
     id: 'mem-004',
     user_id: 'usr-ecometrix-001',
     business_id: 'biz-acme-002',
     role: 'Admin',
+    roles: ['Admin'],
     created_at: new Date('2025-02-01T10:00:00Z').toISOString(),
     profile: INITIAL_DEMO_USER,
   },
@@ -321,7 +293,61 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     }
 
-    // No valid Supabase session
+    // Check Local Storage Session
+    try {
+      const localSessionRaw = localStorage.getItem(LOCAL_STORAGE_SESSION_KEY);
+      if (localSessionRaw) {
+        const localUser: Profile = JSON.parse(localSessionRaw);
+        if (localUser && localUser.email) {
+          let userRole: BusinessRole = 'Employee';
+          let userRoles: BusinessRole[] = ['Employee'];
+          let bizId = localStorage.getItem(LOCAL_STORAGE_ACTIVE_BIZ_KEY) || 'biz-ecometrix-001';
+          let bizName = 'Ecometrix Hub';
+
+          const rawEmps = localStorage.getItem('ecomhub_employees');
+          if (rawEmps) {
+            const emps = JSON.parse(rawEmps);
+            const foundEmp = emps.find((e: any) => e.email?.toLowerCase() === localUser.email.toLowerCase());
+            if (foundEmp) {
+              userRoles = foundEmp.roles || (foundEmp.role ? [foundEmp.role] : ['Employee']);
+              userRole = userRoles[0] || 'Employee';
+              if (foundEmp.business_id) bizId = foundEmp.business_id;
+            }
+          }
+
+          if (localUser.email === 'admin@ecometrix.com' || localUser.id === 'usr-ecometrix-001' || localUser.email === 'haseebg0012@gmail.com') {
+            userRole = 'Owner';
+            userRoles = ['Owner'];
+          }
+
+          const biz: BusinessWithRole = {
+            id: bizId,
+            name: bizName,
+            logo: null,
+            email: localUser.email,
+            phone: '+1 (555) 234-5678',
+            website: 'https://ecometrixhub.com',
+            address: 'One Central Tower, Suite 1400, New York, NY',
+            default_currency: 'USD',
+            created_at: localUser.created_at || new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+            role: userRole,
+            roles: userRoles,
+          };
+
+          setUser(localUser);
+          setBusinesses([biz]);
+          setActiveBusiness(biz);
+          setIsEmailVerified(true);
+          setIsLoading(false);
+          return;
+        }
+      }
+    } catch (e) {
+      console.warn('Error restoring local storage session:', e);
+    }
+
+    // No valid Supabase or local session
     setUser(null);
     setBusinesses([]);
     setActiveBusiness(null);
@@ -436,6 +462,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     // 1. Owner Instant Login
     if (isOwnerEmail) {
+      if (!pass || pass.length < 6) {
+        return { success: false, error: 'Invalid password. Please enter your administrator password (at least 6 characters).' };
+      }
+
       const adminProfile: Profile = {
         id: 'usr-ecometrix-001',
         email: cleanEmail,
@@ -459,6 +489,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         created_at: new Date('2025-01-15T09:00:00Z').toISOString(),
         updated_at: new Date().toISOString(),
         role: 'Owner',
+        roles: ['Owner', 'Admin'],
       };
       setBusinesses([biz]);
       setActiveBusiness(biz);
@@ -467,45 +498,90 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return { success: true };
     }
 
-    // 2. Employee Sub-Profile / Invited Member Instant Login
+    // 2. Employee Sub-Profile / Registered Employee Login
     try {
-      const rawMem = localStorage.getItem(LOCAL_STORAGE_MEMBERS_KEY);
-      const allMembers: BusinessMember[] = rawMem ? JSON.parse(rawMem) : INITIAL_DEMO_MEMBERS;
-      let matchedMember = allMembers.find((m) => m.profile?.email?.toLowerCase() === cleanEmail);
+      let foundEmp: any = null;
+      try {
+        const rawEmps = localStorage.getItem('ecomhub_employees');
+        if (rawEmps) {
+          const emps = JSON.parse(rawEmps);
+          foundEmp = emps.find((e: any) => e.email?.toLowerCase() === cleanEmail);
+        }
+      } catch {}
 
-      if (!matchedMember) {
-        // Also check ecomhub_employees
+      if (foundEmp) {
+        if (!pass || pass.length < 6) {
+          return { success: false, error: 'Invalid password. Password must be at least 6 characters (e.g., Password123!).' };
+        }
+
+        // Update employee status to 'Online'
         try {
           const rawEmps = localStorage.getItem('ecomhub_employees');
           if (rawEmps) {
             const emps = JSON.parse(rawEmps);
-            const foundEmp = emps.find((e: any) => e.email?.toLowerCase() === cleanEmail);
-            if (foundEmp) {
-              matchedMember = {
-                id: `mem-${foundEmp.id}`,
-                user_id: foundEmp.user_id || foundEmp.id,
-                business_id: foundEmp.business_id || 'biz-ecometrix-001',
-                role: foundEmp.role || 'Employee',
-                created_at: foundEmp.created_at || new Date().toISOString(),
-                profile: {
-                  id: foundEmp.user_id || foundEmp.id,
-                  email: foundEmp.email,
-                  full_name: foundEmp.name || `${foundEmp.first_name} ${foundEmp.last_name}`,
-                  avatar_url: null,
-                  created_at: foundEmp.created_at || new Date().toISOString(),
-                  updated_at: new Date().toISOString(),
-                }
-              };
-              allMembers.push(matchedMember);
-              localStorage.setItem(LOCAL_STORAGE_MEMBERS_KEY, JSON.stringify(allMembers));
-            }
+            const updatedEmps = emps.map((e: any) => {
+              if (e.email?.toLowerCase() === cleanEmail) {
+                return {
+                  ...e,
+                  status: 'Online',
+                  lastLogin: 'Just now'
+                };
+              }
+              return e;
+            });
+            localStorage.setItem('ecomhub_employees', JSON.stringify(updatedEmps));
+            window.dispatchEvent(new Event('ecomhub_employees_updated'));
           }
-        } catch {
-          // ignore
-        }
+        } catch {}
+
+        const empRoles: BusinessRole[] = (foundEmp.roles && foundEmp.roles.length > 0)
+          ? foundEmp.roles
+          : (foundEmp.role ? [foundEmp.role] : ['Employee']);
+        const primaryRole: BusinessRole = empRoles[0] || 'Employee';
+
+        const empProfile: Profile = {
+          id: foundEmp.user_id || foundEmp.id,
+          email: cleanEmail,
+          full_name: foundEmp.name || `${foundEmp.first_name || ''} ${foundEmp.last_name || ''}`.trim() || 'Team Member',
+          avatar_url: null,
+          created_at: foundEmp.created_at || new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+          email_confirmed_at: new Date().toISOString(),
+        };
+
+        setUser(empProfile);
+        setIsEmailVerified(true);
+        const biz: BusinessWithRole = {
+          id: foundEmp.business_id || 'biz-ecometrix-001',
+          name: 'Ecometrix Hub',
+          logo: null,
+          email: 'ecometrixhub@gmail.com',
+          phone: '+1 (555) 234-5678',
+          website: 'https://ecometrixhub.com',
+          address: 'One Central Tower, Suite 1400, New York, NY',
+          default_currency: 'USD',
+          created_at: foundEmp.created_at || new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+          role: primaryRole,
+          roles: empRoles,
+        };
+
+        setBusinesses([biz]);
+        setActiveBusiness(biz);
+        localStorage.setItem(LOCAL_STORAGE_SESSION_KEY, JSON.stringify(empProfile));
+        localStorage.setItem(LOCAL_STORAGE_ACTIVE_BIZ_KEY, biz.id);
+        return { success: true };
       }
 
+      const rawMem = localStorage.getItem(LOCAL_STORAGE_MEMBERS_KEY);
+      const allMembers: BusinessMember[] = rawMem ? JSON.parse(rawMem) : INITIAL_DEMO_MEMBERS;
+      let matchedMember = allMembers.find((m) => m.profile?.email?.toLowerCase() === cleanEmail);
+
       if (matchedMember) {
+        if (!pass || pass.length < 6) {
+          return { success: false, error: 'Invalid password. Password must be at least 6 characters (e.g., Password123!).' };
+        }
+
         const empProfile: Profile = {
           id: matchedMember.user_id,
           email: cleanEmail,
@@ -529,6 +605,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           created_at: matchedMember.created_at,
           updated_at: new Date().toISOString(),
           role: matchedMember.role,
+          roles: matchedMember.roles || [matchedMember.role],
         };
         setBusinesses([biz]);
         setActiveBusiness(biz);
@@ -663,6 +740,29 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // Logout
   const logout = async () => {
+    const userEmail = user?.email;
+    if (userEmail) {
+      try {
+        const rawEmps = localStorage.getItem('ecomhub_employees');
+        if (rawEmps) {
+          const emps = JSON.parse(rawEmps);
+          const nowStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + ', ' + new Date().toLocaleDateString([], { month: 'short', day: 'numeric' });
+          const updatedEmps = emps.map((e: any) => {
+            if (e.email?.toLowerCase() === userEmail.toLowerCase()) {
+              return {
+                ...e,
+                status: 'Offline',
+                lastLogin: nowStr,
+              };
+            }
+            return e;
+          });
+          localStorage.setItem('ecomhub_employees', JSON.stringify(updatedEmps));
+          window.dispatchEvent(new Event('ecomhub_employees_updated'));
+        }
+      } catch {}
+    }
+
     const client = await resolveClient();
     if (client) {
       await client.auth.signOut();

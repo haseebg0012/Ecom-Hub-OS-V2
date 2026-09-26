@@ -84,441 +84,12 @@ const yesterdayStr = new Date(Date.now() - 86400000).toISOString().split('T')[0]
 const tomorrowStr = new Date(Date.now() + 86400000).toISOString().split('T')[0];
 const nextWeekStr = new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0];
 
-const INITIAL_DEMO_LEADS: Lead[] = [
-  {
-    id: 'lead-001',
-    business_id: 'biz-ecometrix-001',
-    name: 'Zainab Qureshi',
-    company: 'Apex Apparel Co.',
-    email: 'zainab@apexapparel.pk',
-    phone: '+92 300 1234567',
-    website: 'https://apexapparel.pk',
-    service: 'Shopify Plus Replatform & ERP',
-    message: 'We are expanding to the GCC market and require an automated multi-currency Shopify Plus migration.',
-    budget: 15000,
-    currency: 'USD',
-    source: 'Website',
-    campaign: 'Q1 Enterprise Scale',
-    landing_page: '/enterprise-ecommerce',
-    status: 'Qualified',
-    priority: 'High',
-    assigned_to: 'usr-ecometrix-001',
-    last_contacted_at: new Date(Date.now() - 3600000 * 5).toISOString(),
-    next_followup_at: `${todayStr}T15:00:00Z`,
-    converted_to_client_id: null,
-    created_at: new Date(Date.now() - 86400000 * 2).toISOString(),
-    updated_at: new Date(Date.now() - 3600000 * 2).toISOString(),
-  },
-  {
-    id: 'lead-002',
-    business_id: 'biz-ecometrix-001',
-    name: 'David Sterling',
-    company: 'Lumina Home Living',
-    email: 'david@luminahome.com',
-    phone: '+1 (555) 349-2810',
-    website: 'https://luminahome.com',
-    service: 'Headless Storefront & AI Search',
-    message: 'Need to increase mobile checkout conversion and integrate smart merchandising.',
-    budget: 8500,
-    currency: 'USD',
-    source: 'LinkedIn',
-    campaign: 'Founder Outreach',
-    landing_page: null,
-    status: 'Proposal',
-    priority: 'Urgent',
-    assigned_to: 'usr-colleague-002',
-    last_contacted_at: new Date(Date.now() - 86400000 * 1).toISOString(),
-    next_followup_at: `${tomorrowStr}T11:00:00Z`,
-    converted_to_client_id: null,
-    created_at: new Date(Date.now() - 86400000 * 5).toISOString(),
-    updated_at: new Date(Date.now() - 86400000 * 1).toISOString(),
-  },
-  {
-    id: 'lead-003',
-    business_id: 'biz-ecometrix-001',
-    name: 'Hamza Tariq',
-    company: 'Saffron & Silk Boutique',
-    email: 'hamza@saffronandsilk.com',
-    phone: '+92 321 8899770',
-    website: 'https://saffronandsilk.com',
-    service: 'Marketing Automation & Checkout',
-    message: 'Looking for a dedicated agency to optimize our retention loops and WhatsApp abandoned carts.',
-    budget: 850000,
-    currency: 'PKR',
-    source: 'Referral',
-    campaign: 'Partner Network',
-    landing_page: null,
-    status: 'Meeting',
-    priority: 'Medium',
-    assigned_to: 'usr-ecometrix-001',
-    last_contacted_at: new Date(Date.now() - 86400000 * 3).toISOString(),
-    next_followup_at: `${todayStr}T17:30:00Z`,
-    converted_to_client_id: null,
-    created_at: new Date(Date.now() - 86400000 * 6).toISOString(),
-    updated_at: new Date(Date.now() - 86400000 * 2).toISOString(),
-  },
-  {
-    id: 'lead-004',
-    business_id: 'biz-ecometrix-001',
-    name: 'Omer Farooq',
-    company: 'Karakoram Provisions',
-    email: 'omer@karakoramprovisions.com',
-    phone: '+92 333 4445556',
-    website: 'https://karakoramprovisions.com',
-    service: 'B2B Wholesale Portal',
-    message: 'Submitted inquiry via website request form. We distribute dried fruits and need wholesale customer pricing tiers.',
-    budget: 12000,
-    currency: 'USD',
-    source: 'Website',
-    campaign: 'Inbound Organic',
-    landing_page: '/b2b-ecommerce',
-    status: 'New',
-    priority: 'High',
-    assigned_to: 'usr-ecometrix-001',
-    last_contacted_at: null,
-    next_followup_at: `${todayStr}T12:00:00Z`,
-    converted_to_client_id: null,
-    created_at: new Date(Date.now() - 3600000 * 2).toISOString(),
-    updated_at: new Date(Date.now() - 3600000 * 2).toISOString(),
-  },
-  {
-    id: 'lead-005',
-    business_id: 'biz-ecometrix-001',
-    name: 'Bilal Mirza',
-    company: 'Zenith Activewear',
-    email: 'bilal@zenithfit.pk',
-    phone: '+92 345 5566778',
-    website: 'https://zenithfit.pk',
-    service: 'Conversion Rate Optimization Audit',
-    message: 'Cold called prospect expressed interest in our performance audit package.',
-    budget: 450000,
-    currency: 'PKR',
-    source: 'Cold Call',
-    campaign: 'Direct Calling Q1',
-    landing_page: null,
-    status: 'Contacted',
-    priority: 'Low',
-    assigned_to: 'usr-colleague-002',
-    last_contacted_at: new Date(Date.now() - 86400000 * 2).toISOString(),
-    next_followup_at: `${yesterdayStr}T14:00:00Z`, // Overdue follow-up for demonstration
-    converted_to_client_id: null,
-    created_at: new Date(Date.now() - 86400000 * 4).toISOString(),
-    updated_at: new Date(Date.now() - 86400000 * 2).toISOString(),
-  },
-  {
-    id: 'lead-006',
-    business_id: 'biz-ecometrix-001',
-    name: 'Elena Rostova',
-    company: 'Velvet Rose Cosmetics',
-    email: 'elena@velvetrose.co',
-    phone: '+1 (555) 782-9011',
-    website: 'https://velvetrose.co',
-    service: 'Custom Subscription Engine',
-    message: 'Contract finalized and signed. Lead converted into full client workspace.',
-    budget: 24000,
-    currency: 'USD',
-    source: 'Referral',
-    campaign: 'Executive Client Intro',
-    landing_page: null,
-    status: 'Won',
-    priority: 'High',
-    assigned_to: 'usr-ecometrix-001',
-    last_contacted_at: new Date(Date.now() - 86400000 * 10).toISOString(),
-    next_followup_at: null,
-    converted_to_client_id: 'client-001',
-    created_at: new Date(Date.now() - 86400000 * 25).toISOString(),
-    updated_at: new Date(Date.now() - 86400000 * 10).toISOString(),
-  },
-];
-
-const INITIAL_DEMO_CLIENTS: Client[] = [
-  {
-    id: 'client-001',
-    business_id: 'biz-ecometrix-001',
-    company_name: 'Velvet Rose Cosmetics',
-    logo: null,
-    contact_person: 'Elena Rostova',
-    email: 'elena@velvetrose.co',
-    phone: '+1 (555) 782-9011',
-    website: 'https://velvetrose.co',
-    industry: 'Cosmetics & Beauty',
-    address: '880 Broadway, 12th Floor',
-    city: 'New York',
-    country: 'United States',
-    status: 'Active',
-    source: 'Lead Conversion',
-    assigned_to: 'usr-ecometrix-001',
-    preferred_currency: 'USD',
-    notes: 'Premium cosmetics retailer. Fast-growing recurring subscription model with multi-region warehouse routing.',
-    total_revenue: 24000,
-    outstanding_balance: 4500,
-    created_at: new Date(Date.now() - 86400000 * 10).toISOString(),
-    updated_at: new Date(Date.now() - 86400000 * 2).toISOString(),
-  },
-  {
-    id: 'client-002',
-    business_id: 'biz-ecometrix-001',
-    company_name: 'Horizon Logistics Global',
-    logo: null,
-    contact_person: 'Julian Ward',
-    email: 'ward@horizonlogistics.co',
-    phone: '+44 20 7946 0991',
-    website: 'https://horizonlogistics.co',
-    industry: 'Freight & Supply Chain',
-    address: '45 St Mary Axe',
-    city: 'London',
-    country: 'United Kingdom',
-    status: 'Active',
-    source: 'Direct Business Outreach',
-    assigned_to: 'usr-colleague-002',
-    preferred_currency: 'USD',
-    notes: 'Enterprise tracking portal. Monthly retainer agreement for continuous portal enhancements.',
-    total_revenue: 42000,
-    outstanding_balance: 0,
-    created_at: new Date(Date.now() - 86400000 * 45).toISOString(),
-    updated_at: new Date(Date.now() - 86400000 * 5).toISOString(),
-  },
-  {
-    id: 'client-003',
-    business_id: 'biz-ecometrix-001',
-    company_name: 'Natura Botanicals',
-    logo: null,
-    contact_person: 'Amina Baig',
-    email: 'amina@naturabotanicals.pk',
-    phone: '+92 42 35789012',
-    website: 'https://naturabotanicals.pk',
-    industry: 'Organic Health & Wellness',
-    address: 'Plot 18, Block H, Gulberg III',
-    city: 'Lahore',
-    country: 'Pakistan',
-    status: 'Onboarding',
-    source: 'Inbound Website Inquiry',
-    assigned_to: 'usr-ecometrix-001',
-    preferred_currency: 'PKR',
-    notes: 'Local organic skincare brand establishing nationwide D2C fulfillment and cash-on-delivery tracking.',
-    total_revenue: 1850000,
-    outstanding_balance: 600000,
-    created_at: new Date(Date.now() - 86400000 * 4).toISOString(),
-    updated_at: new Date(Date.now() - 86400000 * 1).toISOString(),
-  },
-];
-
-const INITIAL_DEMO_CONTACTS: ClientContact[] = [
-  {
-    id: 'contact-001',
-    business_id: 'biz-ecometrix-001',
-    client_id: 'client-001',
-    name: 'Elena Rostova',
-    position: 'Chief Executive Officer',
-    email: 'elena@velvetrose.co',
-    phone: '+1 (555) 782-9011',
-    is_primary: true,
-    notes: 'Primary executive signatory.',
-    created_at: new Date(Date.now() - 86400000 * 10).toISOString(),
-  },
-  {
-    id: 'contact-002',
-    business_id: 'biz-ecometrix-001',
-    client_id: 'client-001',
-    name: 'Marcus Chen',
-    position: 'VP of Digital Growth',
-    email: 'marcus@velvetrose.co',
-    phone: '+1 (555) 782-9014',
-    is_primary: false,
-    notes: 'Day-to-day product manager for sprint reviews.',
-    created_at: new Date(Date.now() - 86400000 * 8).toISOString(),
-  },
-  {
-    id: 'contact-003',
-    business_id: 'biz-ecometrix-001',
-    client_id: 'client-002',
-    name: 'Julian Ward',
-    position: 'Operations Director',
-    email: 'ward@horizonlogistics.co',
-    phone: '+44 20 7946 0991',
-    is_primary: true,
-    notes: 'Lead point of contact.',
-    created_at: new Date(Date.now() - 86400000 * 45).toISOString(),
-  },
-  {
-    id: 'contact-004',
-    business_id: 'biz-ecometrix-001',
-    client_id: 'client-003',
-    name: 'Amina Baig',
-    position: 'Managing Partner',
-    email: 'amina@naturabotanicals.pk',
-    phone: '+92 42 35789012',
-    is_primary: true,
-    notes: 'Founder and managing director.',
-    created_at: new Date(Date.now() - 86400000 * 4).toISOString(),
-  },
-];
-
-const INITIAL_DEMO_NOTES: ClientNote[] = [
-  {
-    id: 'note-001',
-    business_id: 'biz-ecometrix-001',
-    client_id: 'client-001',
-    user_id: 'usr-ecometrix-001',
-    content: 'Kickoff call completed successfully. Delivered architecture diagram for automated subscription billing. Sprint 1 starts next Monday.',
-    created_at: new Date(Date.now() - 86400000 * 9).toISOString(),
-    updated_at: new Date(Date.now() - 86400000 * 9).toISOString(),
-  },
-  {
-    id: 'note-002',
-    business_id: 'biz-ecometrix-001',
-    client_id: 'client-001',
-    user_id: 'usr-colleague-002',
-    content: 'Client requested multi-warehouse routing integration with ShipBob. Added to project scope document.',
-    created_at: new Date(Date.now() - 86400000 * 3).toISOString(),
-    updated_at: new Date(Date.now() - 86400000 * 3).toISOString(),
-  },
-  {
-    id: 'note-003',
-    business_id: 'biz-ecometrix-001',
-    client_id: 'client-003',
-    user_id: 'usr-ecometrix-001',
-    content: 'Payment terms agreed in PKR (50% upfront, 50% upon deployment). Cash-on-Delivery reconciliation API will be prioritized.',
-    created_at: new Date(Date.now() - 86400000 * 2).toISOString(),
-    updated_at: new Date(Date.now() - 86400000 * 2).toISOString(),
-  },
-];
-
-const INITIAL_DEMO_ACTIVITIES: CrmActivity[] = [
-  {
-    id: 'act-001',
-    business_id: 'biz-ecometrix-001',
-    lead_id: 'lead-004',
-    client_id: null,
-    user_id: null,
-    activity_type: 'Website submission',
-    title: 'Inbound Lead Captured from Website',
-    description: 'Submitted request form on /b2b-ecommerce for B2B Wholesale Portal. Budget indicated: $12,000 USD.',
-    metadata: { source: 'Website', landing_page: '/b2b-ecommerce' },
-    created_at: new Date(Date.now() - 3600000 * 2).toISOString(),
-  },
-  {
-    id: 'act-002',
-    business_id: 'biz-ecometrix-001',
-    lead_id: 'lead-001',
-    client_id: null,
-    user_id: 'usr-ecometrix-001',
-    activity_type: 'Call',
-    title: 'Discovery Phone Consultation',
-    description: '45-minute phone call with Zainab. Discussed Shopify Plus store architecture and GCC regional payment gateways.',
-    metadata: { duration_minutes: 45, outcome: 'Qualified' },
-    created_at: new Date(Date.now() - 3600000 * 5).toISOString(),
-  },
-  {
-    id: 'act-003',
-    business_id: 'biz-ecometrix-001',
-    lead_id: 'lead-001',
-    client_id: null,
-    user_id: 'usr-ecometrix-001',
-    activity_type: 'Status change',
-    title: 'Lead Status Updated to Qualified',
-    description: 'Moved from Contacted to Qualified following technical requirement validation.',
-    metadata: { previous: 'Contacted', next: 'Qualified' },
-    created_at: new Date(Date.now() - 3600000 * 4).toISOString(),
-  },
-  {
-    id: 'act-004',
-    business_id: 'biz-ecometrix-001',
-    lead_id: 'lead-002',
-    client_id: null,
-    user_id: 'usr-colleague-002',
-    activity_type: 'Meeting',
-    title: 'Proposal Presentation & Architecture Review',
-    description: 'Presented scope proposal via Google Meet. David liked the custom AI search module; review pending board sign-off.',
-    metadata: { duration_minutes: 60, outcome: 'Proposal Delivered' },
-    created_at: new Date(Date.now() - 86400000 * 1).toISOString(),
-  },
-  {
-    id: 'act-005',
-    business_id: 'biz-ecometrix-001',
-    lead_id: 'lead-006',
-    client_id: 'client-001',
-    user_id: 'usr-ecometrix-001',
-    activity_type: 'Converted',
-    title: 'Lead Converted to Active Client',
-    description: 'Lead converted into Client record "Velvet Rose Cosmetics" following contract agreement of $24,000 USD.',
-    metadata: { lead_id: 'lead-006', client_id: 'client-001' },
-    created_at: new Date(Date.now() - 86400000 * 10).toISOString(),
-  },
-];
-
-const INITIAL_DEMO_FOLLOWUPS: LeadFollowup[] = [
-  {
-    id: 'flw-001',
-    business_id: 'biz-ecometrix-001',
-    lead_id: 'lead-004',
-    lead_name: 'Omer Farooq',
-    lead_company: 'Karakoram Provisions',
-    assigned_to: 'usr-ecometrix-001',
-    followup_date: todayStr,
-    followup_time: '12:00',
-    note: 'Initial qualification call for wholesale catalog size and ERP requirements.',
-    status: 'Pending',
-    created_at: new Date(Date.now() - 3600000 * 2).toISOString(),
-    updated_at: new Date(Date.now() - 3600000 * 2).toISOString(),
-  },
-  {
-    id: 'flw-002',
-    business_id: 'biz-ecometrix-001',
-    lead_id: 'lead-001',
-    lead_name: 'Zainab Qureshi',
-    lead_company: 'Apex Apparel Co.',
-    assigned_to: 'usr-ecometrix-001',
-    followup_date: todayStr,
-    followup_time: '15:00',
-    note: 'Send technical statement of work and review timeline estimation.',
-    status: 'Pending',
-    created_at: new Date(Date.now() - 86400000).toISOString(),
-    updated_at: new Date(Date.now() - 86400000).toISOString(),
-  },
-  {
-    id: 'flw-003',
-    business_id: 'biz-ecometrix-001',
-    lead_id: 'lead-003',
-    lead_name: 'Hamza Tariq',
-    lead_company: 'Saffron & Silk Boutique',
-    assigned_to: 'usr-ecometrix-001',
-    followup_date: todayStr,
-    followup_time: '17:30',
-    note: 'Follow up on WhatsApp automation demo and multi-currency pricing questions.',
-    status: 'Pending',
-    created_at: new Date(Date.now() - 86400000 * 2).toISOString(),
-    updated_at: new Date(Date.now() - 86400000 * 2).toISOString(),
-  },
-  {
-    id: 'flw-004',
-    business_id: 'biz-ecometrix-001',
-    lead_id: 'lead-005',
-    lead_name: 'Bilal Mirza',
-    lead_company: 'Zenith Activewear',
-    assigned_to: 'usr-colleague-002',
-    followup_date: yesterdayStr,
-    followup_time: '14:00',
-    note: 'Overdue follow-up check after cold calling to confirm whether CRO sample audit was reviewed.',
-    status: 'Pending',
-    created_at: new Date(Date.now() - 86400000 * 4).toISOString(),
-    updated_at: new Date(Date.now() - 86400000 * 4).toISOString(),
-  },
-  {
-    id: 'flw-005',
-    business_id: 'biz-ecometrix-001',
-    lead_id: 'lead-002',
-    lead_name: 'David Sterling',
-    lead_company: 'Lumina Home Living',
-    assigned_to: 'usr-colleague-002',
-    followup_date: tomorrowStr,
-    followup_time: '11:00',
-    note: 'Touch base with David after their board executive meeting regarding the $8,500 proposal.',
-    status: 'Pending',
-    created_at: new Date(Date.now() - 86400000 * 2).toISOString(),
-    updated_at: new Date(Date.now() - 86400000 * 2).toISOString(),
-  },
-];
+const INITIAL_DEMO_LEADS: Lead[] = [];
+const INITIAL_DEMO_CLIENTS: Client[] = [];
+const INITIAL_DEMO_CONTACTS: ClientContact[] = [];
+const INITIAL_DEMO_NOTES: ClientNote[] = [];
+const INITIAL_DEMO_ACTIVITIES: CrmActivity[] = [];
+const INITIAL_DEMO_FOLLOWUPS: LeadFollowup[] = [];
 
 const INITIAL_DEMO_RATES: ExchangeRate[] = [
   {
@@ -543,44 +114,7 @@ const INITIAL_DEMO_RATES: ExchangeRate[] = [
   },
 ];
 
-const INITIAL_DEMO_NOTIFICATIONS: NotificationItem[] = [
-  {
-    id: 'notif-001',
-    business_id: 'biz-ecometrix-001',
-    user_id: 'usr-ecometrix-001',
-    type: 'lead_capture',
-    title: 'New Inbound Lead via Website',
-    message: 'Omer Farooq from Karakoram Provisions submitted a consultation request for B2B Wholesale Portal ($12,000 USD).',
-    link_section: 'leads',
-    entity_id: 'lead-004',
-    is_read: false,
-    created_at: new Date(Date.now() - 3600000 * 2).toISOString(),
-  },
-  {
-    id: 'notif-002',
-    business_id: 'biz-ecometrix-001',
-    user_id: 'usr-ecometrix-001',
-    type: 'followup_due',
-    title: 'Follow-up Due Today',
-    message: 'You have a scheduled qualification call with Zainab Qureshi (Apex Apparel Co.) today at 15:00.',
-    link_section: 'leads',
-    entity_id: 'lead-001',
-    is_read: false,
-    created_at: new Date(Date.now() - 3600000 * 4).toISOString(),
-  },
-  {
-    id: 'notif-003',
-    business_id: 'biz-ecometrix-001',
-    user_id: 'usr-ecometrix-001',
-    type: 'followup_overdue',
-    title: 'Overdue Follow-up Notice',
-    message: 'Follow-up with Bilal Mirza (Zenith Activewear) was scheduled for yesterday and is pending completion.',
-    link_section: 'leads',
-    entity_id: 'lead-005',
-    is_read: false,
-    created_at: new Date(Date.now() - 86400000).toISOString(),
-  },
-];
+const INITIAL_DEMO_NOTIFICATIONS: NotificationItem[] = [];
 
 export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { activeBusiness, user } = useAuth();
@@ -666,24 +200,25 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
       };
 
-      const allLeads = getStored<Lead>(LS_LEADS_KEY, INITIAL_DEMO_LEADS);
-      const allClients = getStored<Client>(LS_CLIENTS_KEY, INITIAL_DEMO_CLIENTS);
-      const allContacts = getStored<ClientContact>(LS_CONTACTS_KEY, INITIAL_DEMO_CONTACTS);
-      const allNotes = getStored<ClientNote>(LS_NOTES_KEY, INITIAL_DEMO_NOTES);
-      const allActivities = getStored<CrmActivity>(LS_ACTIVITIES_KEY, INITIAL_DEMO_ACTIVITIES);
-      const allFollowups = getStored<LeadFollowup>(LS_FOLLOWUPS_KEY, INITIAL_DEMO_FOLLOWUPS);
+      const allLeads = getStored<Lead>(LS_LEADS_KEY, []);
+      const allClients = getStored<Client>(LS_CLIENTS_KEY, []);
+      const allContacts = getStored<ClientContact>(LS_CONTACTS_KEY, []);
+      const allNotes = getStored<ClientNote>(LS_NOTES_KEY, []);
+      const allActivities = getStored<CrmActivity>(LS_ACTIVITIES_KEY, []);
+      const allFollowups = getStored<LeadFollowup>(LS_FOLLOWUPS_KEY, []);
       const allRates = getStored<ExchangeRate>(LS_RATES_KEY, INITIAL_DEMO_RATES);
-      const allNotifications = getStored<NotificationItem>(LS_NOTIFICATIONS_KEY, INITIAL_DEMO_NOTIFICATIONS);
+      const allNotifications = getStored<NotificationItem>(LS_NOTIFICATIONS_KEY, []);
 
-      // Filter by active tenant
-      setLeads((allLeads || []).filter((l) => l && l.business_id === activeBusiness.id));
-      setClients((allClients || []).filter((c) => c && c.business_id === activeBusiness.id));
-      setClientContacts((allContacts || []).filter((ct) => ct && ct.business_id === activeBusiness.id));
-      setClientNotes((allNotes || []).filter((n) => n && n.business_id === activeBusiness.id));
-      setActivities((allActivities || []).filter((a) => a && a.business_id === activeBusiness.id));
-      setFollowups((allFollowups || []).filter((f) => f && f.business_id === activeBusiness.id));
-      setExchangeRates((allRates || []).filter((r) => r && r.business_id === activeBusiness.id));
-      setNotifications((allNotifications || []).filter((nt) => nt && nt.business_id === activeBusiness.id));
+      // Filter by active tenant (safely include records without business_id or matching active business or if Owner)
+      const isOwner = activeBusiness.role === 'Owner';
+      setLeads((allLeads || []).filter((l) => l && (!l.business_id || l.business_id === activeBusiness.id || isOwner)));
+      setClients((allClients || []).filter((c) => c && (!c.business_id || c.business_id === activeBusiness.id || isOwner)));
+      setClientContacts((allContacts || []).filter((ct) => ct && (!ct.business_id || ct.business_id === activeBusiness.id || isOwner)));
+      setClientNotes((allNotes || []).filter((n) => n && (!n.business_id || n.business_id === activeBusiness.id || isOwner)));
+      setActivities((allActivities || []).filter((a) => a && (!a.business_id || a.business_id === activeBusiness.id || isOwner)));
+      setFollowups((allFollowups || []).filter((f) => f && (!f.business_id || f.business_id === activeBusiness.id || isOwner)));
+      setExchangeRates((allRates || []).filter((r) => r && (!r.business_id || r.business_id === activeBusiness.id || isOwner)));
+      setNotifications((allNotifications || []).filter((nt) => nt && (!nt.business_id || nt.business_id === activeBusiness.id || nt.user_id === user?.id || isOwner)));
       setCrmError(null);
     } catch (e: any) {
       console.error('Error loading CRM local data:', e);
@@ -691,10 +226,26 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     } finally {
       setIsLoading(false);
     }
-  }, [activeBusiness]);
+  }, [activeBusiness, user?.id]);
 
   useEffect(() => {
     loadCrmData();
+
+    const handleSync = () => {
+      loadCrmData();
+    };
+
+    window.addEventListener('ecomhub_leads_updated', handleSync);
+    window.addEventListener('ecomhub_lead_submitted', handleSync);
+    window.addEventListener('ecomhub_crm_activities_updated', handleSync);
+    window.addEventListener('storage', handleSync);
+
+    return () => {
+      window.removeEventListener('ecomhub_leads_updated', handleSync);
+      window.removeEventListener('ecomhub_lead_submitted', handleSync);
+      window.removeEventListener('ecomhub_crm_activities_updated', handleSync);
+      window.removeEventListener('storage', handleSync);
+    };
   }, [loadCrmData]);
 
   // Unread notifications count
@@ -853,33 +404,34 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (client) {
       try {
         const { data: inserted, error } = await client.from('leads').insert([newLead]).select().single();
-        if (error) throw error;
+        if (!error && inserted) {
+          // Add activity
+          await client.from('crm_activities').insert([
+            {
+              business_id: activeBusiness.id,
+              lead_id: inserted.id,
+              user_id: user?.id || null,
+              activity_type: newLead.source === 'Website' ? 'Website submission' : 'Note',
+              title: `Lead Created: ${newLead.name}`,
+              description: `Lead added to pipeline with initial status "${newLead.status}".`,
+            },
+          ]);
 
-        // Add activity
-        await client.from('crm_activities').insert([
-          {
-            business_id: activeBusiness.id,
-            lead_id: inserted.id,
-            user_id: user?.id || null,
-            activity_type: newLead.source === 'Website' ? 'Website submission' : 'Note',
-            title: `Lead Created: ${newLead.name}`,
-            description: `Lead added to pipeline with initial status "${newLead.status}".`,
-          },
-        ]);
-
-        await loadCrmData();
-        return { success: true, lead: inserted };
+          await loadCrmData();
+          window.dispatchEvent(new Event('ecomhub_leads_updated'));
+          return { success: true, lead: inserted };
+        }
       } catch (err: any) {
-        return { success: false, error: err.message };
+        console.warn('Supabase lead insert failed, falling back to local storage:', err);
       }
     }
 
     try {
       const raw = localStorage.getItem(LS_LEADS_KEY);
-      const all: Lead[] = raw ? JSON.parse(raw) : INITIAL_DEMO_LEADS;
+      const all: Lead[] = raw ? JSON.parse(raw) : [];
       all.unshift(newLead);
       localStorage.setItem(LS_LEADS_KEY, JSON.stringify(all));
-      setLeads((prev) => [newLead, ...prev]);
+      setLeads((prev) => [newLead, ...prev.filter((l) => l.id !== newLead.id)]);
 
       // Create activity
       const activity: CrmActivity = {
@@ -894,7 +446,7 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         created_at: new Date().toISOString(),
       };
       const rawAct = localStorage.getItem(LS_ACTIVITIES_KEY);
-      const allAct: CrmActivity[] = rawAct ? JSON.parse(rawAct) : INITIAL_DEMO_ACTIVITIES;
+      const allAct: CrmActivity[] = rawAct ? JSON.parse(rawAct) : [];
       allAct.unshift(activity);
       localStorage.setItem(LS_ACTIVITIES_KEY, JSON.stringify(allAct));
       setActivities((prev) => [activity, ...prev]);
@@ -909,6 +461,7 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         user_id: user?.id || null,
       });
 
+      window.dispatchEvent(new Event('ecomhub_leads_updated'));
       return { success: true, lead: newLead };
     } catch (err: any) {
       return { success: false, error: err.message };

@@ -89,12 +89,12 @@ export function resolveRoute(
       normalizedPath: '/settings/business',
     };
   }
-  if (path === '/settings/team' || path === '/team-roles') {
+  if (path === '/settings/team' || path === '/team-roles' || path === '/team-members-roles' || path.startsWith('/employees')) {
     return {
-      section: 'team-roles',
+      section: 'team-members-roles',
       isUnauthorized: false,
       attemptedPath: path,
-      normalizedPath: '/settings/team',
+      normalizedPath: '/team-members-roles',
     };
   }
   if (path === '/settings/login-history' || path === '/login-history') {
@@ -159,8 +159,8 @@ export function resolveRoute(
   if (path.startsWith('/tasks')) {
     return { section: 'tasks', isUnauthorized: false, attemptedPath: path, normalizedPath: '/tasks' };
   }
-  if (path.startsWith('/employees')) {
-    return { section: 'employees', isUnauthorized: false, attemptedPath: path, normalizedPath: '/employees' };
+  if (path.startsWith('/employees') || path.startsWith('/team-members-roles')) {
+    return { section: 'team-members-roles', isUnauthorized: false, attemptedPath: path, normalizedPath: '/team-members-roles' };
   }
   if (path.startsWith('/documents')) {
     return { section: 'documents', isUnauthorized: false, attemptedPath: path, normalizedPath: '/documents' };
@@ -203,8 +203,8 @@ export function getPathForSection(section: ActiveNavSection, subTab?: string): s
       return '/finance/reports/profit-loss';
     case 'business-settings':
       return '/settings/business';
-    case 'team-roles':
-      return '/settings/team';
+    case 'team-members-roles':
+      return '/team-members-roles';
     case 'login-history':
       return '/settings/login-history';
     case 'lead-entry-settings':

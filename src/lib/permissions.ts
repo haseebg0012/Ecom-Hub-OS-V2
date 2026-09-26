@@ -112,6 +112,16 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<BusinessRole, readonly PermissionS
     // STRICT: NO Finance, NO Settings, NO Team Roles, NO Employees
   ],
 
+  Operations: [
+    'dashboard.view',
+    'leads.view', 'leads.edit',
+    'clients.view',
+    'projects.view', 'projects.create', 'projects.edit', 'projects.manage',
+    'tasks.view', 'tasks.create', 'tasks.edit', 'tasks.delete', 'tasks.manage',
+    'documents.view', 'documents.create',
+    'notifications.view',
+  ],
+
   Employee: [
     'dashboard.view',
     'tasks.view', 'tasks.edit',
@@ -136,23 +146,83 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<BusinessRole, readonly PermissionS
 };
 
 /**
+ * Helper to get corresponding keys between UI permission matrix (e.g. crm.view)
+ * and route/component permissions (e.g. leads.view, clients.view).
+ */
+function getEquivalentPermissionKeys(permission: string): string[] {
+  const keys = [permission];
+  const [mod, act] = permission.split('.');
+  if (mod === 'leads' || mod === 'clients') {
+    keys.push(`crm.${act}`);
+  } else if (mod === 'crm') {
+    keys.push(`leads.${act}`, `clients.${act}`);
+  }
+
+  if (mod === 'employees' || mod === 'team_roles') {
+    keys.push(`team_roles.${act}`, `employees.${act}`);
+  }
+
+  return keys;
+}
+
+/**
  * Check if a role possesses a specific permission string
  */
-export function hasPermission(role: BusinessRole | undefined | null, permission: PermissionString): boolean {
+export function hasPermission(role: BusinessRole | BusinessRole[] | undefined | null, permission: PermissionString): boolean {
   if (!role) return false;
+  const roles = Array.isArray(role) ? role : [role];
 
-  const permissions = DEFAULT_ROLE_PERMISSIONS[role];
-  if (!permissions) return false;
+  let customMatrix: Record<string, Record<string, boolean>> = {};
+  try {
+    const rawMatrix = localStorage.getItem('ecomhub_role_matrix');
+    if (rawMatrix) {
+      customMatrix = JSON.parse(rawMatrix);
+    }
+  } catch {
+    // ignore
+  }
 
-  // Wildcard full access
-  if (permissions.includes('*.*')) return true;
+  const lookupKeys = getEquivalentPermissionKeys(permission);
 
-  // Direct match
-  if (permissions.includes(permission)) return true;
+  for (const r of roles) {
+    if (r === 'Owner') return true;
 
-  // Module wildcard match (e.g. "finance.*")
-  const [module] = permission.split('.');
-  if (permissions.includes(`${module as AppModule}.*`)) return true;
+    const roleMap = customMatrix[r];
+    if (roleMap) {
+      let isExplicitlyAllowed = false;
+      let isExplicitlyDenied = false;
+
+      for (const k of lookupKeys) {
+        if (roleMap[k] === true) {
+          isExplicitlyAllowed = true;
+          break;
+        } else if (roleMap[k] === false) {
+          isExplicitlyDenied = true;
+        }
+      }
+
+      if (isExplicitlyAllowed) return true;
+      if (isExplicitlyDenied) continue; // Denied for this role
+    }
+
+    const permissions = DEFAULT_ROLE_PERMISSIONS[r];
+    if (!permissions) continue;
+
+    // Wildcard full access
+    if (permissions.includes('*.*')) return true;
+
+    // Direct match
+    if (permissions.includes(permission)) return true;
+
+    // Equivalent match
+    for (const k of lookupKeys) {
+      if ((permissions as readonly string[]).includes(k)) return true;
+    }
+
+    // Module wildcard match (e.g. "finance.*")
+    const [module] = permission.split('.');
+    if (permissions.includes(`${module as AppModule}.*`)) return true;
+  }
 
   return false;
 }
@@ -192,6 +262,7 @@ export const ROUTE_PERMISSION_RULES: RoutePermissionRule[] = [
   { pattern: /^\/projects(\/.*)?$/, module: 'projects', action: 'view', requiredPermission: 'projects.view' },
   { pattern: /^\/tasks(\/.*)?$/, module: 'tasks', action: 'view', requiredPermission: 'tasks.view' },
   { pattern: /^\/employees(\/.*)?$/, module: 'employees', action: 'view', requiredPermission: 'employees.view' },
+  { pattern: /^\/team-members-roles(\/.*)?$/, module: 'employees', action: 'view', requiredPermission: 'employees.view' },
   { pattern: /^\/documents(\/.*)?$/, module: 'documents', action: 'view', requiredPermission: 'documents.view' },
   { pattern: /^\/analytics(\/.*)?$/, module: 'analytics', action: 'view', requiredPermission: 'analytics.view' },
   { pattern: /^\/notifications(\/.*)?$/, module: 'notifications', action: 'view', requiredPermission: 'notifications.view' },
@@ -202,7 +273,7 @@ export const ROUTE_PERMISSION_RULES: RoutePermissionRule[] = [
 /**
  * Check if a role is authorized to access a given URL route path
  */
-export function canRoleAccessRoute(role: BusinessRole | undefined | null, pathname: string): boolean {
+export function canRoleAccessRoute(role: BusinessRole | BusinessRole[] | undefined | null, pathname: string): boolean {
   if (!role) return false;
 
   // Clean path (strip trailing slashes, hashes, queries)

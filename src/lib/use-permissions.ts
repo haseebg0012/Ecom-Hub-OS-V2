@@ -21,6 +21,7 @@ export interface UsePermissionsReturn {
   isAdmin: boolean;
   isManager: boolean;
   isFinance: boolean;
+  isOperations: boolean;
   isSales: boolean;
   isEmployee: boolean;
   isViewer: boolean;
@@ -29,24 +30,31 @@ export interface UsePermissionsReturn {
 
 export function usePermissions(): UsePermissionsReturn {
   const { activeBusiness } = useAuth();
-  const role: BusinessRole | null = activeBusiness?.role || null;
+  const roles: BusinessRole[] = activeBusiness?.roles || (activeBusiness?.role ? [activeBusiness.role] : []);
+  const role: BusinessRole | null = roles[0] || null;
 
   const permissionsList = useMemo(() => {
-    if (!role) return [];
-    return DEFAULT_ROLE_PERMISSIONS[role] || [];
-  }, [role]);
+    if (!roles || roles.length === 0) return [];
+    const set = new Set<PermissionString>();
+    for (const r of roles) {
+      const perms = DEFAULT_ROLE_PERMISSIONS[r] || [];
+      perms.forEach((p) => set.add(p as PermissionString));
+    }
+    return Array.from(set);
+  }, [roles]);
 
   return {
     role,
-    can: (permission: PermissionString) => hasPermission(role, permission),
-    canRoute: (routePath: string) => canRoleAccessRoute(role, routePath),
-    isOwner: role === 'Owner',
-    isAdmin: role === 'Admin',
-    isManager: role === 'Manager',
-    isFinance: role === 'Finance',
-    isSales: role === 'Sales',
-    isEmployee: role === 'Employee',
-    isViewer: role === 'Viewer',
+    can: (permission: PermissionString) => hasPermission(roles, permission),
+    canRoute: (routePath: string) => canRoleAccessRoute(roles, routePath),
+    isOwner: roles.includes('Owner'),
+    isAdmin: roles.includes('Admin'),
+    isManager: roles.includes('Manager'),
+    isFinance: roles.includes('Finance'),
+    isOperations: roles.includes('Operations'),
+    isSales: roles.includes('Sales'),
+    isEmployee: roles.includes('Employee'),
+    isViewer: roles.includes('Viewer'),
     allPermissions: permissionsList,
   };
 }
