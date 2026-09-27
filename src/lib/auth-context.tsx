@@ -319,10 +319,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
           if (!hasExplicitEmpRole) {
             if (
-              localUser.email === 'admin@ecometrix.com' ||
-              localUser.id === 'usr-ecometrix-001' ||
               localUser.email === 'haseebg0012@gmail.com' ||
-              localUser.email === 'ecometrixhub@gmail.com'
+              localUser.id === 'usr-ecometrix-001'
             ) {
               userRole = 'Owner';
               userRoles = ['Owner', 'Admin'];
@@ -434,6 +432,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             const assignedRoles: BusinessRole[] = found.roles || [found.role];
             setActiveBusiness((prev) => {
               if (!prev) return prev;
+              if (prev.role === found.role && JSON.stringify(prev.roles) === JSON.stringify(assignedRoles)) {
+                return prev;
+              }
               return {
                 ...prev,
                 role: found.role,
@@ -441,11 +442,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               };
             });
             setBusinesses((prev) =>
-              prev.map((b) => ({
-                ...b,
-                role: found.role,
-                roles: assignedRoles,
-              }))
+              prev.map((b) => {
+                if (b.role === found.role && JSON.stringify(b.roles) === JSON.stringify(assignedRoles)) {
+                  return b;
+                }
+                return {
+                  ...b,
+                  role: found.role,
+                  roles: assignedRoles,
+                };
+              })
             );
           }
         }
@@ -508,7 +514,39 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const cleanEmail = email.trim().toLowerCase();
 
-    // 1. Employee Sub-Profile / Registered Employee Login (CHECK FIRST TO RESPECT ASSIGNED ROLE)
+    // Check if email exists in any known system store
+    let isKnownEmail = false;
+    if (cleanEmail === 'haseebg0012@gmail.com') isKnownEmail = true;
+
+    try {
+      const rawEmps = localStorage.getItem('ecomhub_employees');
+      if (rawEmps) {
+        const emps = JSON.parse(rawEmps);
+        if (emps.some((e: any) => e.email?.trim().toLowerCase() === cleanEmail)) isKnownEmail = true;
+      }
+    } catch {}
+
+    try {
+      const rawMem = localStorage.getItem(LOCAL_STORAGE_MEMBERS_KEY);
+      if (rawMem) {
+        const members = JSON.parse(rawMem);
+        if (members.some((m: any) => m.profile?.email?.trim().toLowerCase() === cleanEmail)) isKnownEmail = true;
+      }
+    } catch {}
+
+    try {
+      const rawReg = localStorage.getItem('ecomhub_registered_users');
+      if (rawReg) {
+        const regUsers = JSON.parse(rawReg);
+        if (regUsers.some((u: any) => u.email?.trim().toLowerCase() === cleanEmail)) isKnownEmail = true;
+      }
+    } catch {}
+
+    if (!isKnownEmail) {
+      return { success: false, error: 'Account does not exist.' };
+    }
+
+    // 1. Employee Sub-Profile / Registered Employee Login
     try {
       let foundEmp: any = null;
       try {
@@ -520,13 +558,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       } catch {}
 
       if (foundEmp) {
-        if (!pass || pass.length < 3) {
-          return { success: false, error: 'Please enter a password.' };
-        }
-
-        const expectedPass = foundEmp.password || foundEmp.temp_password;
-        if (expectedPass && pass !== expectedPass && pass !== 'Password123!' && pass !== 'Admin1234!') {
-          return { success: false, error: 'Invalid password. Please enter the assigned password for this team account.' };
+        const expectedPass = foundEmp.password || foundEmp.temp_password || 'Admin1234!';
+        if (pass !== expectedPass) {
+          return { success: false, error: 'Invalid credentials' };
         }
 
         // Update employee status to 'Online'
@@ -591,16 +625,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       console.warn('Employee local login lookup error:', err);
     }
 
-    const isOwnerEmail =
-      cleanEmail === 'ecometrixhub@gmail.com' ||
-      cleanEmail === 'admin@ecometrix.com' ||
-      cleanEmail === 'haseeb@ecometrixhub.com' ||
-      cleanEmail === 'haseebg0012@gmail.com';
+    const isOwnerEmail = cleanEmail === 'haseebg0012@gmail.com';
 
     // 2. Owner & Master Platform Admin Instant Login
     if (isOwnerEmail) {
-      if (!pass || pass.length < 3) {
-        return { success: false, error: 'Invalid password. Please enter your administrator password.' };
+      if (pass !== 'Password123!' && pass !== 'Admin1234!') {
+        return { success: false, error: 'Invalid credentials' };
       }
 
       const adminProfile: Profile = {
@@ -642,13 +672,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       let matchedMember = allMembers.find((m) => m.profile?.email?.trim().toLowerCase() === cleanEmail);
 
       if (matchedMember) {
-        if (!pass || pass.length < 3) {
-          return { success: false, error: 'Please enter a password.' };
-        }
-
-        const expectedPass = (matchedMember as any).password || (matchedMember as any).temp_password;
-        if (expectedPass && pass !== expectedPass && pass !== 'Password123!' && pass !== 'Admin1234!') {
-          return { success: false, error: 'Invalid password. Please check the assigned password for this team account.' };
+        const expectedPass = (matchedMember as any).password || (matchedMember as any).temp_password || 'Admin1234!';
+        if (pass !== expectedPass) {
+          return { success: false, error: 'Invalid credentials' };
         }
 
         const empProfile: Profile = {
@@ -686,15 +712,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       console.warn('Member local login lookup error:', err);
     }
 
-    // 3. Registered Workspace Users
+    // 4. Registered Workspace Users
     try {
       const rawReg = localStorage.getItem('ecomhub_registered_users');
       if (rawReg) {
         const regUsers = JSON.parse(rawReg);
         const foundReg = regUsers.find((u: any) => u.email?.trim().toLowerCase() === cleanEmail);
         if (foundReg) {
-          if (foundReg.password && pass !== foundReg.password && pass !== 'Admin1234!' && pass !== 'Password123!') {
-            return { success: false, error: 'Invalid password. Please check your credentials.' };
+          const expectedPass = foundReg.password || 'Admin1234!';
+          if (pass !== expectedPass) {
+            return { success: false, error: 'Invalid credentials' };
           }
           const userProf: Profile = {
             id: foundReg.id,
@@ -730,7 +757,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     } catch {}
 
-    // 4. Supabase Auth fallback
+    // 5. Supabase Auth fallback
     const client = await resolveClient();
     if (client) {
       try {
@@ -748,49 +775,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     }
 
-    // 5. Seamless Trial & Administrator Domain Access
-    if (
-      cleanEmail.includes('ecometrix') ||
-      cleanEmail.includes('trial') ||
-      cleanEmail.includes('admin') ||
-      pass === 'Admin1234!' ||
-      pass === 'Password123!'
-    ) {
-      const trialProfile: Profile = {
-        id: `usr-trial-${Date.now()}`,
-        email: cleanEmail,
-        full_name: cleanEmail.split('@')[0],
-        avatar_url: null,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-        email_confirmed_at: new Date().toISOString(),
-      };
-      const trialBiz: BusinessWithRole = {
-        id: 'biz-ecometrix-001',
-        name: 'Ecometrix Hub',
-        logo: null,
-        email: cleanEmail,
-        phone: '+1 (555) 234-5678',
-        website: 'https://ecometrixhub.com',
-        address: 'One Central Tower, Suite 1400, New York, NY',
-        default_currency: 'USD',
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-        role: 'Admin',
-        roles: ['Admin', 'Owner'],
-      };
-      setUser(trialProfile);
-      setIsEmailVerified(true);
-      setBusinesses([trialBiz]);
-      setActiveBusiness(trialBiz);
-      localStorage.setItem(LOCAL_STORAGE_SESSION_KEY, JSON.stringify(trialProfile));
-      localStorage.setItem(LOCAL_STORAGE_ACTIVE_BIZ_KEY, trialBiz.id);
-      return { success: true };
-    }
-
     return {
       success: false,
-      error: 'Invalid email or password. Please verify your credentials or contact your organization administrator.'
+      error: 'Invalid credentials'
     };
   };
 

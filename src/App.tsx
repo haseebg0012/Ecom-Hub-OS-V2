@@ -186,6 +186,15 @@ function AppContent() {
 }
 
 export default function App() {
+  useEffect(() => {
+    try {
+      if (typeof window !== 'undefined' && !localStorage.getItem('ecomhub_zero_demo_data_v2')) {
+        clearAllWorkspaceData();
+        localStorage.setItem('ecomhub_zero_demo_data_v2', 'true');
+      }
+    } catch {}
+  }, []);
+
   const [publicFormToken, setPublicFormToken] = useState<string | null>(() => getPublicLeadEntryToken());
   const [isAcceptInvite, setIsAcceptInvite] = useState<boolean>(() => checkIsAcceptInvitation());
   const [isAuthCallback, setIsAuthCallback] = useState<boolean>(() => checkIsAuthCallback());

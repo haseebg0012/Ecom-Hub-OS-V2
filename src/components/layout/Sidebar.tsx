@@ -185,7 +185,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const [uiVisTick, setUiVisTick] = useState(0);
 
   useEffect(() => {
-    const handleSync = () => setUiVisTick((t) => t + 1);
+    const handleSync = () => {
+      setTimeout(() => setUiVisTick((t) => t + 1), 0);
+    };
     window.addEventListener('ecomhub_ui_role_visibility_updated', handleSync);
     window.addEventListener('ecomhub_role_matrix_updated', handleSync);
     window.addEventListener('ecomhub_employees_updated', handleSync);

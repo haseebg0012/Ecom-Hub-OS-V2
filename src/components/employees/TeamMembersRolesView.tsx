@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../../lib/auth-context';
 import { BusinessRole } from '../../types';
+import { syncEmployeeToLeadAgent } from '../../lib/lead-entry-service';
 
 interface RoleConfigItem {
   key: string;
@@ -421,6 +422,15 @@ export const TeamMembersRolesView: React.FC = () => {
       if (regIdx >= 0) regUsers[regIdx] = regEntry;
       else regUsers.push(regEntry);
       localStorage.setItem('ecomhub_registered_users', JSON.stringify(regUsers));
+
+      syncEmployeeToLeadAgent({
+        name: newEmp.name,
+        email: newEmp.email,
+        phone: newEmp.phone,
+        business_id: newEmp.business_id,
+        role: newEmp.role,
+        roles: newEmp.roles,
+      });
     } catch {}
 
     try {
@@ -602,19 +612,23 @@ export const TeamMembersRolesView: React.FC = () => {
   return (
     <div className="max-w-7xl mx-auto p-6 space-y-6">
       {/* Top Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-4 border-b border-[#2D3748]">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-indigo-500/10 text-indigo-400 flex items-center justify-center border border-indigo-500/20">
-            <Users className="w-5 h-5" />
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-4 border-b border-[#E2E8F0]">
+        <div>
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-semibold text-[#64748B] uppercase tracking-wider">
+              Team Directory
+            </span>
+            <span className="text-[#94A3B8]">•</span>
+            <span className="text-xs font-semibold text-[#4F46E5] bg-[#EEF2FF] px-2 py-0.5 rounded border border-[#E0E7FF]">
+              Access Control & Roles
+            </span>
           </div>
-          <div>
-            <h1 className="text-xl font-bold text-white tracking-tight">
-              Team Members & Roles
-            </h1>
-            <p className="text-xs text-slate-400">
-              Manage organization members, custom multiple system roles, and operational privileges for <strong className="text-white">{activeBusiness?.name}</strong>.
-            </p>
-          </div>
+          <h1 className="text-xl sm:text-2xl font-bold text-[#0F172A] tracking-tight mt-1">
+            Team Members & Roles
+          </h1>
+          <p className="text-xs text-[#64748B] mt-0.5">
+            Manage organization members, custom multiple system roles, and operational privileges for <strong className="text-[#0F172A]">{activeBusiness?.name}</strong>.
+          </p>
         </div>
 
         <div className="flex items-center gap-3">
@@ -625,15 +639,8 @@ export const TeamMembersRolesView: React.FC = () => {
             </div>
           )}
           <button
-            onClick={handleFactoryReset}
-            className="inline-flex items-center gap-2 px-3.5 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-semibold rounded-xl border border-slate-700 transition-all"
-            title="Wipe all dummy data and start fresh"
-          >
-            <span>🧹 Fresh Start</span>
-          </button>
-          <button
             onClick={() => setIsAddModalOpen(true)}
-            className="inline-flex items-center gap-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold rounded-xl shadow-md shadow-indigo-600/30 transition-all"
+            className="inline-flex items-center gap-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold rounded-xl shadow-md shadow-indigo-600/30 transition-all cursor-pointer"
           >
             <UserPlus className="w-4 h-4" />
             <span>Add Employee</span>

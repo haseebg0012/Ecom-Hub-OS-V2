@@ -29,68 +29,7 @@ const RATE_LIMIT_WINDOW_MS = 60 * 1000; // 1 minute
 const MAX_SUBMISSIONS_PER_WINDOW = 20; // 20 per minute per token is plenty for an agent, blocks spam bots
 
 // Initial seed data
-const INITIAL_DEMO_AGENTS: LeadAgent[] = [
-  {
-    id: 'agent-001',
-    business_id: 'biz-ecometrix-001',
-    name: 'Ali Raza',
-    phone: '+92 300 1122334',
-    email: 'ali.raza@ecometrixhub.com',
-    is_active: true,
-    created_at: new Date('2025-01-16T10:00:00Z').toISOString(),
-    updated_at: new Date().toISOString(),
-  },
-  {
-    id: 'agent-002',
-    business_id: 'biz-ecometrix-001',
-    name: 'Usman Tariq',
-    phone: '+92 321 5566778',
-    email: 'usman.t@ecometrixhub.com',
-    is_active: true,
-    created_at: new Date('2025-01-18T11:00:00Z').toISOString(),
-    updated_at: new Date().toISOString(),
-  },
-  {
-    id: 'agent-003',
-    business_id: 'biz-ecometrix-001',
-    name: 'Hamza Malik',
-    phone: '+92 333 9988776',
-    email: 'hamza.m@ecometrixhub.com',
-    is_active: true,
-    created_at: new Date('2025-01-20T09:30:00Z').toISOString(),
-    updated_at: new Date().toISOString(),
-  },
-  {
-    id: 'agent-004',
-    business_id: 'biz-ecometrix-001',
-    name: 'Bilal Ahmed',
-    phone: '+92 345 4433221',
-    email: 'bilal.a@ecometrixhub.com',
-    is_active: false,
-    created_at: new Date('2025-01-22T14:00:00Z').toISOString(),
-    updated_at: new Date().toISOString(),
-  },
-  {
-    id: 'agent-acme-001',
-    business_id: 'biz-acme-002',
-    name: 'Carlos Gomez',
-    phone: '+1 (555) 432-1098',
-    email: 'carlos@acmegrowth.co',
-    is_active: true,
-    created_at: new Date('2025-02-02T10:00:00Z').toISOString(),
-    updated_at: new Date().toISOString(),
-  },
-  {
-    id: 'agent-acme-002',
-    business_id: 'biz-acme-002',
-    name: 'Maya Patel',
-    phone: '+1 (555) 876-5432',
-    email: 'maya@acmegrowth.co',
-    is_active: true,
-    created_at: new Date('2025-02-03T11:30:00Z').toISOString(),
-    updated_at: new Date().toISOString(),
-  },
-];
+const INITIAL_DEMO_AGENTS: LeadAgent[] = [];
 
 const INITIAL_DEMO_FORMS: LeadEntryForm[] = [
   {
@@ -784,4 +723,44 @@ export async function submitPublicLead(
       agent_name: trimmedAgent,
     },
   };
+}
+
+export function syncEmployeeToLeadAgent(emp: {
+  name: string;
+  email?: string;
+  phone?: string;
+  business_id?: string;
+  role?: string;
+  roles?: string[];
+}) {
+  if (typeof window === 'undefined') return;
+  try {
+    const bizId = emp.business_id || 'biz-ecometrix-001';
+    const raw = localStorage.getItem(LS_AGENTS_KEY);
+    const agents: LeadAgent[] = raw ? JSON.parse(raw) : [];
+
+    const existingIdx = agents.findIndex(
+      (a) =>
+        (emp.email && a.email?.toLowerCase() === emp.email.toLowerCase()) ||
+        a.name.toLowerCase() === emp.name.toLowerCase()
+    );
+
+    const agentObj: LeadAgent = {
+      id: existingIdx >= 0 ? agents[existingIdx].id : `agent-emp-${Date.now()}`,
+      business_id: bizId,
+      name: emp.name,
+      email: emp.email || '',
+      phone: emp.phone || '',
+      is_active: true,
+      created_at: existingIdx >= 0 ? agents[existingIdx].created_at : new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+
+    if (existingIdx >= 0) {
+      agents[existingIdx] = agentObj;
+    } else {
+      agents.push(agentObj);
+    }
+    localStorage.setItem(LS_AGENTS_KEY, JSON.stringify(agents));
+  } catch {}
 }
