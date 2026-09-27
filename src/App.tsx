@@ -186,15 +186,6 @@ function AppContent() {
 }
 
 export default function App() {
-  // Fresh start wipe of dummy records across finances, leads, projects, clients, tasks, and employees
-  useEffect(() => {
-    try {
-      if (typeof window !== 'undefined' && !localStorage.getItem('ecomhub_fresh_clean_v16_accounts_zero')) {
-        clearAllWorkspaceData();
-      }
-    } catch {}
-  }, []);
-
   const [publicFormToken, setPublicFormToken] = useState<string | null>(() => getPublicLeadEntryToken());
   const [isAcceptInvite, setIsAcceptInvite] = useState<boolean>(() => checkIsAcceptInvitation());
   const [isAuthCallback, setIsAuthCallback] = useState<boolean>(() => checkIsAuthCallback());

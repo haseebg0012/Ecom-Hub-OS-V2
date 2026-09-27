@@ -276,6 +276,7 @@ export const EmployeesView: React.FC = () => {
           employment_type: employmentType,
           phone: phone.trim(),
           notes: notes.trim(),
+          password: 'Admin1234!',
           temp_password: 'Admin1234!',
           status: 'Invited',
           created_at: new Date().toISOString(),
@@ -285,6 +286,8 @@ export const EmployeesView: React.FC = () => {
       }
 
       if (createdEmp) {
+        if (!createdEmp.password) createdEmp.password = 'Admin1234!';
+        if (!createdEmp.temp_password) createdEmp.temp_password = 'Admin1234!';
         setEmployees((prev) => [createdEmp, ...prev]);
         setLastCreatedEmployee(createdEmp);
         const currentOrigin = window.location.origin;
@@ -306,6 +309,7 @@ export const EmployeesView: React.FC = () => {
             user_id: createdEmp.user_id || createdEmp.id,
             business_id: businessId,
             role: createdEmp.role,
+            password: createdEmp.password,
             created_at: new Date().toISOString(),
             profile: {
               id: createdEmp.user_id || createdEmp.id,
@@ -315,6 +319,19 @@ export const EmployeesView: React.FC = () => {
           };
           allMem.push(newMem);
           localStorage.setItem('ecomhub_members', JSON.stringify(allMem));
+
+          const rawReg = localStorage.getItem('ecomhub_registered_users');
+          const regUsers = rawReg ? JSON.parse(rawReg) : [];
+          regUsers.push({
+            id: createdEmp.user_id || createdEmp.id,
+            email: createdEmp.email,
+            password: createdEmp.password,
+            full_name: `${createdEmp.first_name} ${createdEmp.last_name}`,
+            role: createdEmp.role,
+            business_name: 'Ecometrix Hub',
+            created_at: new Date().toISOString(),
+          });
+          localStorage.setItem('ecomhub_registered_users', JSON.stringify(regUsers));
         } catch (e) {
           console.warn('Member storage sync warning:', e);
         }

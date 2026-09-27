@@ -321,16 +321,29 @@ export const AuthPage: React.FC = () => {
             <div className="mt-5 pt-4 border-t border-[#E2E8F0] space-y-3">
               <div className="flex items-center justify-between">
                 <span className="text-[11px] font-bold text-[#64748B] uppercase tracking-wider">Quick Sign In</span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setEmail('haseebg0012@gmail.com');
-                    setPassword('Password123!');
-                  }}
-                  className="text-[11px] font-semibold text-[#4F46E5] hover:underline"
-                >
-                  Autofill Admin
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEmail('ecometrixtrial@gmail.com');
+                      setPassword('Admin1234!');
+                    }}
+                    className="text-[11px] font-semibold text-[#4F46E5] hover:underline"
+                  >
+                    Fill Trial Admin
+                  </button>
+                  <span className="text-slate-300">•</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEmail('admin@ecometrix.com');
+                      setPassword('Admin1234!');
+                    }}
+                    className="text-[11px] font-semibold text-[#4F46E5] hover:underline"
+                  >
+                    Fill Admin
+                  </button>
+                </div>
               </div>
 
               {savedEmployees && savedEmployees.length > 0 && (
@@ -370,18 +383,30 @@ export const AuthPage: React.FC = () => {
           )}
 
           {/* Mode Switchers */}
-          <div className="mt-5 pt-4 border-t border-[#E2E8F0] text-center">
+          <div className="mt-5 pt-4 border-t border-[#E2E8F0] text-center space-y-1.5">
             {mode === 'login' && (
-              <p className="text-xs text-[#64748B]">
-                Forgot your password?{' '}
-                <button
-                  type="button"
-                  onClick={() => switchMode('forgot_password')}
-                  className="font-semibold text-[#4F46E5] hover:text-[#4338CA]"
-                >
-                  Reset password
-                </button>
-              </p>
+              <>
+                <p className="text-xs text-[#64748B]">
+                  Don't have an account yet?{' '}
+                  <button
+                    type="button"
+                    onClick={() => switchMode('signup')}
+                    className="font-semibold text-[#4F46E5] hover:text-[#4338CA]"
+                  >
+                    Create new workspace
+                  </button>
+                </p>
+                <p className="text-xs text-[#64748B]">
+                  Forgot your password?{' '}
+                  <button
+                    type="button"
+                    onClick={() => switchMode('forgot_password')}
+                    className="font-semibold text-[#4F46E5] hover:text-[#4338CA]"
+                  >
+                    Reset password
+                  </button>
+                </p>
+              </>
             )}
 
 

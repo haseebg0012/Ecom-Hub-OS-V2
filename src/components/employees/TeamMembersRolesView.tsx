@@ -397,6 +397,23 @@ export const TeamMembersRolesView: React.FC = () => {
       };
       allMem.push(newMem);
       localStorage.setItem('ecomhub_members', JSON.stringify(allMem));
+
+      // Also register into ecomhub_registered_users for universal login support
+      const rawReg = localStorage.getItem('ecomhub_registered_users');
+      const regUsers = rawReg ? JSON.parse(rawReg) : [];
+      const regIdx = regUsers.findIndex((u: any) => u.email?.toLowerCase() === cleanEmail);
+      const regEntry = {
+        id: newEmp.user_id,
+        email: cleanEmail,
+        password: newEmp.password,
+        full_name: newEmp.name,
+        role: newEmp.role,
+        business_name: 'Ecometrix Hub',
+        created_at: newEmp.created_at,
+      };
+      if (regIdx >= 0) regUsers[regIdx] = regEntry;
+      else regUsers.push(regEntry);
+      localStorage.setItem('ecomhub_registered_users', JSON.stringify(regUsers));
     } catch {}
 
     try {
@@ -501,6 +518,24 @@ export const TeamMembersRolesView: React.FC = () => {
           return m;
         });
         localStorage.setItem('ecomhub_members', JSON.stringify(updatedMem));
+      }
+
+      const rawReg = localStorage.getItem('ecomhub_registered_users');
+      if (rawReg) {
+        const regUsers = JSON.parse(rawReg);
+        const updatedReg = regUsers.map((u: any) => {
+          if (u.email?.toLowerCase() === editingEmployee.email?.toLowerCase()) {
+            return {
+              ...u,
+              email: editForm.email.trim().toLowerCase(),
+              full_name: editForm.name,
+              password: newPass,
+              role: editForm.role,
+            };
+          }
+          return u;
+        });
+        localStorage.setItem('ecomhub_registered_users', JSON.stringify(updatedReg));
       }
     } catch {}
 
