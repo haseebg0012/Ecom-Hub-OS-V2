@@ -242,6 +242,7 @@ export const TeamMembersRolesView: React.FC = () => {
   });
 
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const [matrixSaveStatus, setMatrixSaveStatus] = useState<string | null>(null);
 
   // Load employees & matrices from localStorage
   useEffect(() => {
@@ -286,7 +287,7 @@ export const TeamMembersRolesView: React.FC = () => {
   }, []);
 
   const handleTogglePermission = (modId: string, action: string) => {
-    setIsMatrixDirty(false);
+    setIsMatrixDirty(true);
     const key = `${modId}.${action}`;
     setRolePermissions((prev) => {
       const currentRolePerms = prev[selectedRoleKey] || {};
@@ -316,7 +317,7 @@ export const TeamMembersRolesView: React.FC = () => {
   };
 
   const handleToggleUiVisibility = (modId: string) => {
-    setIsMatrixDirty(false);
+    setIsMatrixDirty(true);
     setUiVisibilityMap((prev) => {
       const currentRoleMap = prev[selectedRoleKey] || {};
       const currentVal = currentRoleMap[modId] !== false; // defaults to true
@@ -340,10 +341,16 @@ export const TeamMembersRolesView: React.FC = () => {
       localStorage.setItem('ecomhub_role_matrix', JSON.stringify(rolePermissions));
       localStorage.setItem('ecomhub_ui_role_visibility', JSON.stringify(uiVisibilityMap));
       window.dispatchEvent(new Event('ecomhub_ui_role_visibility_updated'));
+      window.dispatchEvent(new Event('ecomhub_role_matrix_updated'));
       setIsMatrixDirty(false);
-      setStatusMessage(`Permissions & UI View configuration saved successfully for ${selectedRoleKey}!`);
-      setTimeout(() => setStatusMessage(null), 3000);
+      setMatrixSaveStatus(`Saved & applied for ${currentRoleObj.label}!`);
+      setStatusMessage(`Permissions & UI View configuration saved successfully for ${currentRoleObj.label}!`);
+      setTimeout(() => {
+        setMatrixSaveStatus(null);
+        setStatusMessage(null);
+      }, 3500);
     } catch {
+      setMatrixSaveStatus('Error saving configuration.');
       setStatusMessage('Error saving configuration.');
     }
   };
@@ -736,18 +743,27 @@ export const TeamMembersRolesView: React.FC = () => {
                 </button>
               </div>
 
-              {/* Dynamic Save Matrix Button: Blue when dirty, Grey when saved */}
-              <button
-                onClick={handleSaveMatrix}
-                className={`inline-flex items-center gap-2 px-4 py-2 text-xs font-semibold rounded-xl transition-all ${
-                  isMatrixDirty
-                    ? 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-md shadow-indigo-600/30 ring-2 ring-indigo-400/30'
-                    : 'bg-slate-800 text-slate-400 border border-slate-700 cursor-default'
-                }`}
-              >
-                <Save className="w-3.5 h-3.5" />
-                <span>{isMatrixDirty ? 'Save Matrix' : 'Saved'}</span>
-              </button>
+              {/* Dynamic Save Matrix Button & Inline Feedback */}
+              <div className="flex items-center gap-2.5">
+                {matrixSaveStatus && (
+                  <span className="text-xs text-emerald-400 font-semibold flex items-center gap-1.5 animate-in fade-in">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                    <span>{matrixSaveStatus}</span>
+                  </span>
+                )}
+                <button
+                  type="button"
+                  onClick={handleSaveMatrix}
+                  className={`inline-flex items-center gap-2 px-4 py-2 text-xs font-semibold rounded-xl transition-all cursor-pointer ${
+                    isMatrixDirty
+                      ? 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-md shadow-indigo-600/30 ring-2 ring-indigo-400/40'
+                      : 'bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/40 shadow-xs'
+                  }`}
+                >
+                  <Save className="w-3.5 h-3.5" />
+                  <span>{isMatrixDirty ? 'Save Changes' : '✓ Saved & Applied'}</span>
+                </button>
+              </div>
             </div>
 
             {/* TAB 1: CRUD Permissions Matrix with View Dependency */}

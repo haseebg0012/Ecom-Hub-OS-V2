@@ -304,26 +304,29 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           let bizId = localStorage.getItem(LOCAL_STORAGE_ACTIVE_BIZ_KEY) || 'biz-ecometrix-001';
           let bizName = 'Ecometrix Hub';
 
+          let hasExplicitEmpRole = false;
           const rawEmps = localStorage.getItem('ecomhub_employees');
           if (rawEmps) {
             const emps = JSON.parse(rawEmps);
             const foundEmp = emps.find((e: any) => e.email?.toLowerCase() === localUser.email.toLowerCase());
-            if (foundEmp) {
-              userRoles = foundEmp.roles || (foundEmp.role ? [foundEmp.role] : ['Employee']);
-              userRole = userRoles[0] || 'Employee';
+            if (foundEmp && foundEmp.role) {
+              userRoles = foundEmp.roles || [foundEmp.role];
+              userRole = foundEmp.role;
+              hasExplicitEmpRole = true;
               if (foundEmp.business_id) bizId = foundEmp.business_id;
             }
           }
 
-          if (
-            localUser.email === 'admin@ecometrix.com' ||
-            localUser.id === 'usr-ecometrix-001' ||
-            localUser.email === 'haseebg0012@gmail.com' ||
-            localUser.email === 'ecometrixtrial@gmail.com' ||
-            localUser.email === 'ecometrixhub@gmail.com'
-          ) {
-            userRole = 'Owner';
-            userRoles = ['Owner', 'Admin'];
+          if (!hasExplicitEmpRole) {
+            if (
+              localUser.email === 'admin@ecometrix.com' ||
+              localUser.id === 'usr-ecometrix-001' ||
+              localUser.email === 'haseebg0012@gmail.com' ||
+              localUser.email === 'ecometrixhub@gmail.com'
+            ) {
+              userRole = 'Owner';
+              userRoles = ['Owner', 'Admin'];
+            }
           }
 
           const biz: BusinessWithRole = {
@@ -414,6 +417,49 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
   }, [initializeAuth]);
 
+  // Dynamically sync active user's role whenever an employee is edited or created
+  useEffect(() => {
+    const handleEmpUpdated = () => {
+      try {
+        const rawSession = localStorage.getItem(LOCAL_STORAGE_SESSION_KEY);
+        if (!rawSession) return;
+        const localUser = JSON.parse(rawSession);
+        if (!localUser?.email) return;
+
+        const rawEmps = localStorage.getItem('ecomhub_employees');
+        if (rawEmps) {
+          const emps = JSON.parse(rawEmps);
+          const found = emps.find((e: any) => e.email?.toLowerCase() === localUser.email.toLowerCase());
+          if (found && found.role) {
+            const assignedRoles: BusinessRole[] = found.roles || [found.role];
+            setActiveBusiness((prev) => {
+              if (!prev) return prev;
+              return {
+                ...prev,
+                role: found.role,
+                roles: assignedRoles,
+              };
+            });
+            setBusinesses((prev) =>
+              prev.map((b) => ({
+                ...b,
+                role: found.role,
+                roles: assignedRoles,
+              }))
+            );
+          }
+        }
+      } catch {}
+    };
+
+    window.addEventListener('ecomhub_employees_updated', handleEmpUpdated);
+    window.addEventListener('storage', handleEmpUpdated);
+    return () => {
+      window.removeEventListener('ecomhub_employees_updated', handleEmpUpdated);
+      window.removeEventListener('storage', handleEmpUpdated);
+    };
+  }, []);
+
   // Switch Active Business
   const switchBusiness = useCallback((businessId: string) => {
     const target = businesses.find((b) => b.id === businessId);
@@ -461,52 +507,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     const cleanEmail = email.trim().toLowerCase();
-    const isOwnerEmail =
-      cleanEmail === 'ecometrixhub@gmail.com' ||
-      cleanEmail === 'admin@ecometrix.com' ||
-      cleanEmail === 'haseeb@ecometrixhub.com' ||
-      cleanEmail === 'haseebg0012@gmail.com' ||
-      cleanEmail === 'ecometrixtrial@gmail.com';
 
-    // 1. Owner & Administrator Instant Login
-    if (isOwnerEmail) {
-      if (!pass || pass.length < 3) {
-        return { success: false, error: 'Invalid password. Please enter your administrator password.' };
-      }
-
-      const adminProfile: Profile = {
-        id: 'usr-ecometrix-001',
-        email: cleanEmail,
-        full_name: cleanEmail === 'ecometrixtrial@gmail.com' ? 'Ecometrix Trial Admin' : 'Ecometrix Hub Admin',
-        avatar_url: null,
-        created_at: new Date('2025-01-15T09:00:00Z').toISOString(),
-        updated_at: new Date().toISOString(),
-        email_confirmed_at: new Date().toISOString(),
-      };
-      setUser(adminProfile);
-      setIsEmailVerified(true);
-      const biz: BusinessWithRole = {
-        id: 'biz-ecometrix-001',
-        name: 'Ecometrix Hub',
-        logo: null,
-        email: cleanEmail,
-        phone: '+1 (555) 234-5678',
-        website: 'https://ecometrixhub.com',
-        address: 'One Central Tower, Suite 1400, New York, NY',
-        default_currency: 'USD',
-        created_at: new Date('2025-01-15T09:00:00Z').toISOString(),
-        updated_at: new Date().toISOString(),
-        role: 'Owner',
-        roles: ['Owner', 'Admin'],
-      };
-      setBusinesses([biz]);
-      setActiveBusiness(biz);
-      localStorage.setItem(LOCAL_STORAGE_SESSION_KEY, JSON.stringify(adminProfile));
-      localStorage.setItem(LOCAL_STORAGE_ACTIVE_BIZ_KEY, biz.id);
-      return { success: true };
-    }
-
-    // 2. Employee Sub-Profile / Registered Employee Login
+    // 1. Employee Sub-Profile / Registered Employee Login (CHECK FIRST TO RESPECT ASSIGNED ROLE)
     try {
       let foundEmp: any = null;
       try {
@@ -550,7 +552,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const empRoles: BusinessRole[] = (foundEmp.roles && foundEmp.roles.length > 0)
           ? foundEmp.roles
           : (foundEmp.role ? [foundEmp.role] : ['Employee']);
-        const primaryRole: BusinessRole = empRoles[0] || 'Employee';
+        const primaryRole: BusinessRole = foundEmp.role || empRoles[0] || 'Employee';
 
         const empProfile: Profile = {
           id: foundEmp.user_id || foundEmp.id,
@@ -568,7 +570,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           id: foundEmp.business_id || 'biz-ecometrix-001',
           name: 'Ecometrix Hub',
           logo: null,
-          email: 'ecometrixhub@gmail.com',
+          email: cleanEmail,
           phone: '+1 (555) 234-5678',
           website: 'https://ecometrixhub.com',
           address: 'One Central Tower, Suite 1400, New York, NY',
@@ -585,7 +587,56 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         localStorage.setItem(LOCAL_STORAGE_ACTIVE_BIZ_KEY, biz.id);
         return { success: true };
       }
+    } catch (err) {
+      console.warn('Employee local login lookup error:', err);
+    }
 
+    const isOwnerEmail =
+      cleanEmail === 'ecometrixhub@gmail.com' ||
+      cleanEmail === 'admin@ecometrix.com' ||
+      cleanEmail === 'haseeb@ecometrixhub.com' ||
+      cleanEmail === 'haseebg0012@gmail.com';
+
+    // 2. Owner & Master Platform Admin Instant Login
+    if (isOwnerEmail) {
+      if (!pass || pass.length < 3) {
+        return { success: false, error: 'Invalid password. Please enter your administrator password.' };
+      }
+
+      const adminProfile: Profile = {
+        id: 'usr-ecometrix-001',
+        email: cleanEmail,
+        full_name: 'Ecometrix Hub Admin',
+        avatar_url: null,
+        created_at: new Date('2025-01-15T09:00:00Z').toISOString(),
+        updated_at: new Date().toISOString(),
+        email_confirmed_at: new Date().toISOString(),
+      };
+      setUser(adminProfile);
+      setIsEmailVerified(true);
+      const biz: BusinessWithRole = {
+        id: 'biz-ecometrix-001',
+        name: 'Ecometrix Hub',
+        logo: null,
+        email: cleanEmail,
+        phone: '+1 (555) 234-5678',
+        website: 'https://ecometrixhub.com',
+        address: 'One Central Tower, Suite 1400, New York, NY',
+        default_currency: 'USD',
+        created_at: new Date('2025-01-15T09:00:00Z').toISOString(),
+        updated_at: new Date().toISOString(),
+        role: 'Owner',
+        roles: ['Owner', 'Admin'],
+      };
+      setBusinesses([biz]);
+      setActiveBusiness(biz);
+      localStorage.setItem(LOCAL_STORAGE_SESSION_KEY, JSON.stringify(adminProfile));
+      localStorage.setItem(LOCAL_STORAGE_ACTIVE_BIZ_KEY, biz.id);
+      return { success: true };
+    }
+
+    // 3. Workspace Members
+    try {
       const rawMem = localStorage.getItem(LOCAL_STORAGE_MEMBERS_KEY);
       const allMembers: BusinessMember[] = rawMem ? JSON.parse(rawMem) : INITIAL_DEMO_MEMBERS;
       let matchedMember = allMembers.find((m) => m.profile?.email?.trim().toLowerCase() === cleanEmail);
@@ -632,7 +683,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return { success: true };
       }
     } catch (err) {
-      console.warn('Employee local login lookup error:', err);
+      console.warn('Member local login lookup error:', err);
     }
 
     // 3. Registered Workspace Users
