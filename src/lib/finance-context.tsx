@@ -243,8 +243,8 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
       name: 'Meezan Bank - Corporate PKR',
       type: 'Bank',
       currency: 'PKR',
-      opening_balance: 1500000,
-      current_balance: 2450000,
+      opening_balance: 0,
+      current_balance: 0,
       description: 'Primary corporate operational checking account for local payroll and vendor payments.',
       is_active: true,
       created_at: new Date(Date.now() - 86400000 * 90).toISOString(),
@@ -256,8 +256,8 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
       name: 'Standard Chartered - USD Inward',
       type: 'Bank',
       currency: 'USD',
-      opening_balance: 25000,
-      current_balance: 38450,
+      opening_balance: 0,
+      current_balance: 0,
       description: 'Foreign currency account receiving overseas client retainer wire transfers.',
       is_active: true,
       created_at: new Date(Date.now() - 86400000 * 90).toISOString(),
@@ -269,8 +269,8 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
       name: 'Wise Business Global Multi-Currency',
       type: 'Digital Wallet',
       currency: 'USD',
-      opening_balance: 8000,
-      current_balance: 12150,
+      opening_balance: 0,
+      current_balance: 0,
       description: 'Used for paying global SaaS tools (Shopify, Figma, AWS, Vercel) and contractor disbursements.',
       is_active: true,
       created_at: new Date(Date.now() - 86400000 * 90).toISOString(),
@@ -282,8 +282,8 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
       name: 'Office Petty Cash Vault',
       type: 'Cash',
       currency: 'PKR',
-      opening_balance: 100000,
-      current_balance: 65000,
+      opening_balance: 0,
+      current_balance: 0,
       description: 'Daily office supplies, refreshments, courier delivery charges, and local errands.',
       is_active: true,
       created_at: new Date(Date.now() - 86400000 * 90).toISOString(),
@@ -445,10 +445,30 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
     try {
       // 1. Accounts
       const rawAccounts = localStorage.getItem(`${LS_ACCOUNTS_KEY}_${businessId}`);
+      let currentAccounts: FinancialAccount[] = [];
       if (rawAccounts) {
-        setAccounts(JSON.parse(rawAccounts));
+        const parsed = JSON.parse(rawAccounts);
+        currentAccounts = (parsed || []).map((a: any) => {
+          if (
+            !localStorage.getItem('ecomhub_fresh_clean_v16_accounts_zero') ||
+            a.opening_balance === 1500000 ||
+            a.opening_balance === 25000 ||
+            a.opening_balance === 8000 ||
+            a.opening_balance === 100000 ||
+            a.current_balance === 2450000 ||
+            a.current_balance === 38450 ||
+            a.current_balance === 12150 ||
+            a.current_balance === 65000
+          ) {
+            return { ...a, opening_balance: 0, current_balance: 0 };
+          }
+          return a;
+        });
+        setAccounts(currentAccounts);
+        localStorage.setItem(`${LS_ACCOUNTS_KEY}_${businessId}`, JSON.stringify(currentAccounts));
       } else {
         const initial = getInitialDemoAccounts(businessId);
+        currentAccounts = initial;
         setAccounts(initial);
         localStorage.setItem(`${LS_ACCOUNTS_KEY}_${businessId}`, JSON.stringify(initial));
       }
@@ -533,8 +553,10 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
       // 9. Transactions
       const rawTransactions = localStorage.getItem(`${LS_TRANSACTIONS_KEY}_${businessId}`);
+      let loadedTrx: Transaction[] = [];
       if (rawTransactions) {
-        setTransactions(JSON.parse(rawTransactions));
+        loadedTrx = JSON.parse(rawTransactions);
+        setTransactions(loadedTrx);
       } else {
         const initialTrx = getInitialDemoTransactions(
           businessId,
@@ -542,9 +564,30 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
           currentExpenses,
           currentInvestments
         );
+        loadedTrx = initialTrx;
         setTransactions(initialTrx);
         localStorage.setItem(`${LS_TRANSACTIONS_KEY}_${businessId}`, JSON.stringify(initialTrx));
       }
+
+      // Reconcile account balances based on transactions and opening balances
+      const reconciledAccounts = currentAccounts.map((acc) => {
+        const accTrx = loadedTrx.filter((t) => t.account_id === acc.id && t.status === 'completed');
+        const netChange = accTrx.reduce((sum, t) => {
+          const amt = Number(t.amount) || 0;
+          if (t.transaction_type === 'income' || t.transaction_type === 'refund') {
+            return sum + amt;
+          } else if (t.transaction_type === 'expense' || t.transaction_type === 'investment') {
+            return sum - amt;
+          }
+          return sum;
+        }, 0);
+        return {
+          ...acc,
+          current_balance: Number(acc.opening_balance || 0) + netChange,
+        };
+      });
+      setAccounts(reconciledAccounts);
+      localStorage.setItem(`${LS_ACCOUNTS_KEY}_${businessId}`, JSON.stringify(reconciledAccounts));
 
       // 10. Recurring
       const rawRecurring = localStorage.getItem(`${LS_RECURRING_KEY}_${businessId}`);

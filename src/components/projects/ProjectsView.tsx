@@ -52,6 +52,7 @@ export const ProjectsView: React.FC = () => {
   useEffect(() => {
     try {
       localStorage.setItem(`ecomhub_projects_${businessId}`, JSON.stringify(projects));
+      window.dispatchEvent(new Event('ecomhub_projects_updated'));
     } catch {
       // ignore
     }

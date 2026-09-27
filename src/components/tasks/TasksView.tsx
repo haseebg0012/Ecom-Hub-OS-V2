@@ -49,6 +49,7 @@ export const TasksView: React.FC = () => {
   useEffect(() => {
     try {
       localStorage.setItem(`ecomhub_tasks_${businessId}`, JSON.stringify(tasks));
+      window.dispatchEvent(new Event('ecomhub_tasks_updated'));
     } catch {
       // ignore
     }

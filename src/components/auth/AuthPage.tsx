@@ -26,6 +26,15 @@ export const AuthPage: React.FC = () => {
   const [fullName, setFullName] = useState('');
   const [businessName, setBusinessName] = useState('Ecometrix Hub');
 
+  const [savedEmployees, setSavedEmployees] = useState<any[]>(() => {
+    try {
+      const raw = localStorage.getItem('ecomhub_employees');
+      return raw ? JSON.parse(raw) : [];
+    } catch {
+      return [];
+    }
+  });
+
   // State
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
@@ -78,6 +87,13 @@ export const AuthPage: React.FC = () => {
         setIsLoading(false);
         if (!res.success) {
           setErrorMessage(res.error || 'Invalid credentials or login failure.');
+        } else {
+          if (typeof window !== 'undefined' && window.location.pathname !== '/') {
+            try {
+              window.history.replaceState({}, '', '/');
+              window.dispatchEvent(new PopStateEvent('popstate'));
+            } catch {}
+          }
         }
       } else if (mode === 'signup') {
         if (!email.trim() || !password || !fullName.trim()) {
@@ -300,8 +316,61 @@ export const AuthPage: React.FC = () => {
             </button>
           </form>
 
+          {/* Quick Access / Registered Team Accounts */}
+          {mode === 'login' && (
+            <div className="mt-5 pt-4 border-t border-[#E2E8F0] space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-bold text-[#64748B] uppercase tracking-wider">Quick Sign In</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEmail('haseebg0012@gmail.com');
+                    setPassword('Password123!');
+                  }}
+                  className="text-[11px] font-semibold text-[#4F46E5] hover:underline"
+                >
+                  Autofill Admin
+                </button>
+              </div>
+
+              {savedEmployees && savedEmployees.length > 0 && (
+                <div className="space-y-1.5">
+                  <div className="text-[10px] text-[#64748B] font-medium">Created Team Accounts (Click to Fill):</div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {savedEmployees.slice(0, 5).map((emp: any) => (
+                      <button
+                        key={emp.id}
+                        type="button"
+                        onClick={() => {
+                          setEmail(emp.email);
+                          setPassword(emp.password || emp.temp_password || 'Admin1234!');
+                        }}
+                        className="px-2.5 py-1 bg-slate-50 hover:bg-indigo-50 hover:text-indigo-600 rounded-lg text-[11px] text-slate-700 font-medium transition-colors border border-slate-200 flex items-center gap-1.5"
+                        title={`Click to fill ${emp.email}`}
+                      >
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0"></span>
+                        <span className="truncate max-w-[120px]">{emp.name || emp.email}</span>
+                        <span className="text-[9px] bg-slate-200/80 text-slate-600 px-1 py-0.2 rounded font-bold">
+                          {emp.role || 'Member'}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <button
+                type="button"
+                onClick={() => bypassLogin()}
+                className="w-full py-2 px-3 bg-emerald-50 border border-emerald-200 text-emerald-700 hover:bg-emerald-100 rounded-lg text-xs font-semibold transition-colors flex items-center justify-center gap-1.5 shadow-2xs"
+              >
+                <span>Instant Demo Access (Owner / Admin)</span>
+              </button>
+            </div>
+          )}
+
           {/* Mode Switchers */}
-          <div className="mt-6 pt-5 border-t border-[#E2E8F0] text-center">
+          <div className="mt-5 pt-4 border-t border-[#E2E8F0] text-center">
             {mode === 'login' && (
               <p className="text-xs text-[#64748B]">
                 Forgot your password?{' '}

@@ -60,7 +60,38 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({ isOpen, onClose }) =
     setIsChangingPassword(true);
     setPasswordNotice(null);
     try {
-      await new Promise((r) => setTimeout(r, 600));
+      const email = user?.email?.trim().toLowerCase();
+      if (email) {
+        // Update ecomhub_employees
+        try {
+          const rawEmps = localStorage.getItem('ecomhub_employees');
+          if (rawEmps) {
+            const emps = JSON.parse(rawEmps);
+            const updated = emps.map((e: any) =>
+              e.email?.trim().toLowerCase() === email
+                ? { ...e, password: newPassword, temp_password: newPassword }
+                : e
+            );
+            localStorage.setItem('ecomhub_employees', JSON.stringify(updated));
+            window.dispatchEvent(new Event('ecomhub_employees_updated'));
+          }
+        } catch {}
+
+        // Update ecomhub_members
+        try {
+          const rawMem = localStorage.getItem('ecomhub_members');
+          if (rawMem) {
+            const members = JSON.parse(rawMem);
+            const updatedM = members.map((m: any) =>
+              m.profile?.email?.trim().toLowerCase() === email
+                ? { ...m, password: newPassword, temp_password: newPassword }
+                : m
+            );
+            localStorage.setItem('ecomhub_members', JSON.stringify(updatedM));
+          }
+        } catch {}
+      }
+
       setPasswordNotice({ type: 'success', text: 'Password successfully updated! Your new password is now active.' });
       setNewPassword('');
       setConfirmPassword('');

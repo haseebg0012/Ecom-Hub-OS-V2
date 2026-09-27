@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import {
   TrendingUp,
   CreditCard,
@@ -87,6 +87,47 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       pendingFollowups,
     };
   }, [leads, clients, followups, getExchangeRate]);
+
+  // Live dynamic project & task counters
+  const [activeProjectsCount, setActiveProjectsCount] = useState<number>(0);
+  const [openTasksCount, setOpenTasksCount] = useState<number>(0);
+
+  useEffect(() => {
+    const updateCounts = () => {
+      try {
+        const bizId = activeBusiness?.id || 'biz-default';
+        const rawP = localStorage.getItem(`ecomhub_projects_${bizId}`);
+        if (rawP) {
+          const prjs = JSON.parse(rawP);
+          setActiveProjectsCount(Array.isArray(prjs) ? prjs.filter((p: any) => p.status === 'Active').length : 0);
+        } else {
+          setActiveProjectsCount(0);
+        }
+        const rawT = localStorage.getItem(`ecomhub_tasks_${bizId}`);
+        if (rawT) {
+          const tsks = JSON.parse(rawT);
+          setOpenTasksCount(Array.isArray(tsks) ? tsks.filter((t: any) => t.status !== 'Completed').length : 0);
+        } else {
+          setOpenTasksCount(0);
+        }
+      } catch {
+        setActiveProjectsCount(0);
+        setOpenTasksCount(0);
+      }
+    };
+
+    updateCounts();
+
+    window.addEventListener('ecomhub_projects_updated', updateCounts);
+    window.addEventListener('ecomhub_tasks_updated', updateCounts);
+    window.addEventListener('storage', updateCounts);
+
+    return () => {
+      window.removeEventListener('ecomhub_projects_updated', updateCounts);
+      window.removeEventListener('ecomhub_tasks_updated', updateCounts);
+      window.removeEventListener('storage', updateCounts);
+    };
+  }, [activeBusiness?.id]);
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto">
@@ -270,8 +311,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 <FolderKanban className="w-3.5 h-3.5" />
               </div>
             </div>
-            <div className="text-2xl font-bold text-[#0F172A]">3</div>
-            <p className="text-[11px] text-[#94A3B8] mt-1">Connected to client retainers</p>
+            <div className="text-2xl font-bold text-[#0F172A]">{activeProjectsCount}</div>
+            <p className="text-[11px] text-[#94A3B8] mt-1">
+              {activeProjectsCount === 1 ? '1 active project' : `${activeProjectsCount} active deliverables`}
+            </p>
           </div>
 
           {/* Tasks */}
@@ -285,8 +328,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 <CheckSquare className="w-3.5 h-3.5" />
               </div>
             </div>
-            <div className="text-2xl font-bold text-[#0F172A]">8</div>
-            <p className="text-[11px] text-[#94A3B8] mt-1">Ready for team sprint</p>
+            <div className="text-2xl font-bold text-[#0F172A]">{openTasksCount}</div>
+            <p className="text-[11px] text-[#94A3B8] mt-1">
+              {openTasksCount === 1 ? '1 open task' : `${openTasksCount} pending deliverables`}
+            </p>
           </div>
         </div>
       </div>

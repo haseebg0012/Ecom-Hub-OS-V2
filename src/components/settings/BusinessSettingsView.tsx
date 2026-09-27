@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Building2, Check, Loader2, Globe, Mail, Phone, MapPin, DollarSign, ShieldAlert, Smartphone, ArrowRight, Trash2, AlertTriangle } from 'lucide-react';
+import { Building2, Check, Loader2, Globe, Mail, Phone, MapPin, DollarSign, ShieldAlert, Smartphone, ArrowRight, Trash2, AlertTriangle, RefreshCw } from 'lucide-react';
 import { useAuth } from '../../lib/auth-context';
 import { SUPPORTED_CURRENCIES, resolveCurrency } from '../../lib/currencies';
+import { clearAllWorkspaceData } from '../../lib/clear-data';
 
 interface BusinessSettingsViewProps {
   onNavigate?: (section: string) => void;
@@ -24,6 +25,9 @@ export const BusinessSettingsView: React.FC<BusinessSettingsViewProps> = ({ onNa
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [confirmNameInput, setConfirmNameInput] = useState('');
   const [isDeleting, setIsDeleting] = useState(false);
+
+  const [showClearModal, setShowClearModal] = useState(false);
+  const [isClearing, setIsClearing] = useState(false);
 
   const canEdit = activeBusiness?.role === 'Owner' || activeBusiness?.role === 'Admin';
   const isOwner = activeBusiness?.role === 'Owner';
@@ -295,6 +299,99 @@ export const BusinessSettingsView: React.FC<BusinessSettingsViewProps> = ({ onNa
           </div>
         )}
       </form>
+
+      {/* Fresh Start: Reset / Clear Workspace Data */}
+      {canEdit && (
+        <div className="bg-white rounded-xl border border-amber-200 shadow-xs overflow-hidden">
+          <div className="p-5 border-b border-amber-100 bg-amber-50/50 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-lg bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
+                <RefreshCw className="w-4 h-4" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-amber-950">Workspace Data Reset (Fresh Clean Start)</h3>
+                <p className="text-xs text-amber-800">Clear all demo leads, finances, invoices, expenses, tasks, and projects.</p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowClearModal(true)}
+              className="inline-flex items-center justify-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold text-amber-900 hover:text-white bg-amber-100 hover:bg-amber-600 border border-amber-300 rounded-lg transition-colors shadow-2xs shrink-0"
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+              <span>Clear All Data</span>
+            </button>
+          </div>
+          <div className="p-5 text-xs text-slate-600 leading-relaxed">
+            Wipes all cached and demo records (leads, clients, invoices, expenses, projects, tasks, and team members) providing a completely clean workspace without deleting the business profile.
+          </div>
+        </div>
+      )}
+
+      {/* Clear Data Confirmation Modal */}
+      {showClearModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200 space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0 border border-amber-200">
+                <RefreshCw className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-slate-900">Reset All Workspace Data?</h3>
+                <p className="text-xs text-slate-500">This will empty all demo and test records.</p>
+              </div>
+            </div>
+
+            <p className="text-xs text-slate-600">
+              Are you sure you want to clear all leads, clients, invoices, expenses, projects, tasks, and employees? You will get a 100% fresh, blank slate.
+            </p>
+
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <button
+                type="button"
+                disabled={isClearing}
+                onClick={() => setShowClearModal(false)}
+                className="px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 rounded-xl transition-colors border border-slate-200"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={isClearing}
+                onClick={() => {
+                  setIsClearing(true);
+                  try {
+                    clearAllWorkspaceData();
+                    setShowClearModal(false);
+                    setStatusMessage({ type: 'success', text: 'All workspace data cleared successfully! Clean slate active.' });
+                    setTimeout(() => {
+                      setStatusMessage(null);
+                      window.location.reload();
+                    }, 1200);
+                  } catch (e: any) {
+                    setStatusMessage({ type: 'error', text: e?.message || 'Error clearing data' });
+                  } finally {
+                    setIsClearing(false);
+                  }
+                }}
+                className="px-4 py-2 text-xs font-semibold text-white bg-amber-600 hover:bg-amber-700 rounded-xl transition-colors shadow-xs flex items-center gap-1.5"
+              >
+                {isClearing ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>Clearing...</span>
+                  </>
+                ) : (
+                  <>
+                    <RefreshCw className="w-3.5 h-3.5" />
+                    <span>Confirm Fresh Reset</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Danger Zone for Owners */}
       {isOwner && activeBusiness && (

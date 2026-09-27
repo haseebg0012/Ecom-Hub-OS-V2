@@ -17,7 +17,8 @@ import {
   ChevronDown,
   ChevronUp,
   Layout,
-  Lock
+  Lock,
+  Key
 } from 'lucide-react';
 import { useAuth } from '../../lib/auth-context';
 import { BusinessRole } from '../../types';
@@ -211,23 +212,26 @@ export const TeamMembersRolesView: React.FC = () => {
   // Modals state
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [editingEmployee, setEditingEmployee] = useState<any | null>(null);
+  const [lastCreatedEmployee, setLastCreatedEmployee] = useState<any | null>(null);
+  const [loginLinkUrl, setLoginLinkUrl] = useState<string>('');
 
   // Add Employee Form State
   const [addForm, setAddForm] = useState({
     name: '',
     email: '',
-    password: 'Password123!',
-    role: 'Sales' as BusinessRole,
-    roles: ['Sales'] as string[],
-    jobTitle: 'Sales Associate',
-    department: 'Sales & Growth',
-    phone: '+1 (555) 019-2834'
+    password: 'Admin1234!',
+    role: 'Admin' as BusinessRole,
+    roles: ['Admin'] as string[],
+    jobTitle: 'System Administrator',
+    department: 'Executive / IT',
+    phone: ''
   });
 
   // Edit Employee Form State
   const [editForm, setEditForm] = useState({
     name: '',
     email: '',
+    password: 'Password123!',
     role: 'Sales' as BusinessRole,
     roles: ['Sales'] as string[],
     jobTitle: '',
@@ -349,17 +353,22 @@ export const TeamMembersRolesView: React.FC = () => {
     if (!addForm.name || !addForm.email) return;
 
     const assignedRoles = addForm.roles.includes(addForm.role) ? addForm.roles : [addForm.role, ...addForm.roles];
+    const empPassword = addForm.password.trim() || 'Admin1234!';
+    const cleanEmail = addForm.email.trim().toLowerCase();
 
     const newEmp = {
       id: `emp-${Date.now()}`,
       business_id: activeBusiness?.id || 'biz-ecometrix-001',
-      name: addForm.name,
-      email: addForm.email,
+      user_id: `usr-emp-${Date.now()}`,
+      name: addForm.name.trim(),
+      email: cleanEmail,
+      password: empPassword,
+      temp_password: empPassword,
       role: addForm.role,
       roles: assignedRoles,
-      jobTitle: addForm.jobTitle,
-      department: addForm.department,
-      phone: addForm.phone,
+      jobTitle: addForm.jobTitle.trim() || 'Team Member',
+      department: addForm.department.trim() || 'General',
+      phone: addForm.phone.trim(),
       status: 'Added',
       lastLogin: 'Never',
       performedTasksCount: 0,
@@ -370,23 +379,51 @@ export const TeamMembersRolesView: React.FC = () => {
     saveEmployeesToStorage(updated);
 
     try {
-      inviteMember(addForm.email, addForm.name, addForm.role);
+      const rawMem = localStorage.getItem('ecomhub_members');
+      const allMem = rawMem ? JSON.parse(rawMem) : [];
+      const newMem = {
+        id: `mem-${newEmp.id}`,
+        user_id: newEmp.user_id,
+        business_id: newEmp.business_id,
+        role: newEmp.role,
+        roles: newEmp.roles,
+        password: newEmp.password,
+        created_at: newEmp.created_at,
+        profile: {
+          id: newEmp.user_id,
+          email: newEmp.email,
+          full_name: newEmp.name,
+        }
+      };
+      allMem.push(newMem);
+      localStorage.setItem('ecomhub_members', JSON.stringify(allMem));
+    } catch {}
+
+    try {
+      inviteMember(cleanEmail, newEmp.name, addForm.role);
     } catch {
       // ignore
     }
+
+    const currentOrigin = typeof window !== 'undefined' ? window.location.origin : '';
+    const defaultBase = currentOrigin.includes('localhost') || currentOrigin.includes('run.app')
+      ? 'https://ecomhubsystem.vercel.app'
+      : currentOrigin;
+    setLoginLinkUrl(`${defaultBase}/login`);
+    setLastCreatedEmployee(newEmp);
 
     setIsAddModalOpen(false);
     setAddForm({
       name: '',
       email: '',
-      password: 'Password123!',
-      role: 'Sales',
-      roles: ['Sales'],
-      jobTitle: 'Sales Associate',
-      department: 'Sales & Growth',
-      phone: '+1 (555) 019-2834'
+      password: 'Admin1234!',
+      role: 'Admin',
+      roles: ['Admin'],
+      jobTitle: 'System Administrator',
+      department: 'Executive / IT',
+      phone: ''
     });
-    setStatusMessage(`Employee ${newEmp.name} added successfully!`);
+    setStatusMessage(`Employee ${newEmp.name} registered successfully! Credentials popup ready.`);
     setTimeout(() => setStatusMessage(null), 4000);
   };
 
@@ -404,6 +441,7 @@ export const TeamMembersRolesView: React.FC = () => {
     setEditForm({
       name: emp.name || '',
       email: emp.email || '',
+      password: emp.password || emp.temp_password || 'Admin1234!',
       role: emp.role || empRoles[0] || 'Sales',
       roles: empRoles,
       jobTitle: emp.jobTitle || emp.department || '',
@@ -419,13 +457,16 @@ export const TeamMembersRolesView: React.FC = () => {
     if (!editingEmployee) return;
 
     const assignedRoles = editForm.roles.includes(editForm.role) ? editForm.roles : [editForm.role, ...editForm.roles];
+    const newPass = editForm.password.trim() || editingEmployee.password || 'Admin1234!';
 
     const updated = employees.map((emp) => {
       if (emp.id === editingEmployee.id) {
         return {
           ...emp,
           name: editForm.name,
-          email: editForm.email,
+          email: editForm.email.trim().toLowerCase(),
+          password: newPass,
+          temp_password: newPass,
           role: editForm.role,
           roles: assignedRoles,
           jobTitle: editForm.jobTitle,
@@ -438,8 +479,33 @@ export const TeamMembersRolesView: React.FC = () => {
     });
 
     saveEmployeesToStorage(updated);
+
+    try {
+      const rawMem = localStorage.getItem('ecomhub_members');
+      if (rawMem) {
+        const allMem = JSON.parse(rawMem);
+        const updatedMem = allMem.map((m: any) => {
+          if (m.id === editingEmployee.id || m.profile?.email?.toLowerCase() === editingEmployee.email?.toLowerCase()) {
+            return {
+              ...m,
+              role: editForm.role,
+              roles: assignedRoles,
+              password: newPass,
+              profile: {
+                ...m.profile,
+                full_name: editForm.name,
+                email: editForm.email.trim().toLowerCase()
+              }
+            };
+          }
+          return m;
+        });
+        localStorage.setItem('ecomhub_members', JSON.stringify(updatedMem));
+      }
+    } catch {}
+
     setEditingEmployee(null);
-    setStatusMessage('Employee updated successfully with assigned roles!');
+    setStatusMessage('Employee updated successfully with assigned password and roles!');
     setTimeout(() => setStatusMessage(null), 3000);
   };
 
@@ -866,6 +932,22 @@ export const TeamMembersRolesView: React.FC = () => {
                         <td className="py-3.5 px-4 text-right">
                           <div className="flex items-center justify-end gap-2">
                             <button
+                              type="button"
+                              onClick={() => {
+                                setLastCreatedEmployee(emp);
+                                const currentOrigin = typeof window !== 'undefined' ? window.location.origin : '';
+                                const defaultBase = currentOrigin.includes('localhost') || currentOrigin.includes('run.app')
+                                  ? 'https://ecomhubsystem.vercel.app'
+                                  : currentOrigin;
+                                setLoginLinkUrl(`${defaultBase}/login`);
+                              }}
+                              className="px-2.5 py-1.5 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-300 text-xs font-medium rounded-lg transition-colors flex items-center gap-1 border border-indigo-500/20"
+                              title="View credentials and direct login link"
+                            >
+                              <Key className="w-3.5 h-3.5 text-indigo-400" />
+                              <span>Login Info</span>
+                            </button>
+                            <button
                               onClick={() => handleOpenEdit(emp)}
                               className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium rounded-lg transition-colors flex items-center gap-1"
                             >
@@ -1082,6 +1164,23 @@ export const TeamMembersRolesView: React.FC = () => {
                     />
                   </div>
                 </div>
+                <div className="grid grid-cols-1 gap-4">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-300 mb-1.5 flex items-center gap-1.5">
+                      <Lock className="w-3.5 h-3.5 text-indigo-400" />
+                      <span>Account Password / Direct Access Key</span>
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. Password123!"
+                      value={editForm.password}
+                      onChange={(e) => setEditForm({ ...editForm, password: e.target.value })}
+                      className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-lg text-xs font-mono text-indigo-300 focus:outline-hidden focus:border-indigo-500"
+                    />
+                    <p className="text-[11px] text-slate-500 mt-1">This password is used by the employee to log into this workspace.</p>
+                  </div>
+                </div>
               </div>
 
               {/* DIVIDER 2: Status & Work Performance */}
@@ -1238,6 +1337,116 @@ export const TeamMembersRolesView: React.FC = () => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* SUCCESS & DIRECT ACCESS CREDENTIALS POPUP MODAL */}
+      {lastCreatedEmployee && (
+        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-[#141B2D] border border-slate-800 rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-emerald-500/10 text-emerald-400 flex items-center justify-center shrink-0 border border-emerald-500/20">
+                <CheckCircle2 className="w-5 h-5 text-emerald-400" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-white">Employee Sub-Profile Ready!</h3>
+                <p className="text-xs text-slate-400">Ready for immediate login and task execution</p>
+              </div>
+            </div>
+
+            <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 space-y-2.5 text-xs">
+              <div className="flex justify-between items-center">
+                <span className="text-slate-400">Name:</span>
+                <span className="font-semibold text-white">{lastCreatedEmployee.name}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-slate-400">Email ID:</span>
+                <div className="flex items-center gap-2">
+                  <span className="font-mono text-indigo-300 font-semibold">{lastCreatedEmployee.email}</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      navigator.clipboard.writeText(lastCreatedEmployee.email);
+                      setStatusMessage(`Copied email ${lastCreatedEmployee.email}!`);
+                      setTimeout(() => setStatusMessage(null), 3000);
+                    }}
+                    className="text-[11px] text-indigo-400 hover:text-indigo-300 font-semibold"
+                  >
+                    Copy
+                  </button>
+                </div>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-slate-400">Temp / Initial Password:</span>
+                <div className="flex items-center gap-1.5">
+                  <span className="font-mono text-indigo-400 font-bold bg-indigo-950/60 border border-indigo-500/30 px-2 py-0.5 rounded-md">
+                    {lastCreatedEmployee.password || lastCreatedEmployee.temp_password || 'Admin1234!'}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      navigator.clipboard.writeText(lastCreatedEmployee.password || lastCreatedEmployee.temp_password || 'Admin1234!');
+                      setStatusMessage(`Copied password!`);
+                      setTimeout(() => setStatusMessage(null), 3000);
+                    }}
+                    className="text-[11px] text-indigo-400 hover:text-indigo-300 font-semibold ml-1"
+                  >
+                    Copy
+                  </button>
+                </div>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-slate-400">Assigned Primary Role:</span>
+                <span className="font-semibold text-indigo-400">{lastCreatedEmployee.role}</span>
+              </div>
+              {lastCreatedEmployee.roles && lastCreatedEmployee.roles.length > 1 && (
+                <div className="flex justify-between items-center">
+                  <span className="text-slate-400">All Assigned Roles:</span>
+                  <span className="font-medium text-slate-300">{lastCreatedEmployee.roles.join(', ')}</span>
+                </div>
+              )}
+              <div className="flex justify-between items-center">
+                <span className="text-slate-400">Department:</span>
+                <span className="font-medium text-slate-300">{lastCreatedEmployee.department}</span>
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="block text-xs font-semibold text-slate-300">Direct Employee Login Link:</label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  value={loginLinkUrl}
+                  onChange={(e) => setLoginLinkUrl(e.target.value)}
+                  className="block w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-lg text-xs font-mono text-white focus:outline-hidden focus:border-indigo-500"
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    navigator.clipboard.writeText(loginLinkUrl);
+                    setStatusMessage(`Copied login link for ${lastCreatedEmployee.email}!`);
+                    setTimeout(() => setStatusMessage(null), 3000);
+                  }}
+                  className="px-3.5 py-2 bg-indigo-600 text-white text-xs font-semibold rounded-lg hover:bg-indigo-500 shrink-0 transition-colors"
+                >
+                  Copy Link
+                </button>
+              </div>
+              <p className="text-[11px] text-slate-400 mt-1">
+                Share this login URL and credentials with the employee. They can sign in instantly with their email and password to access their isolated workspace and tasks.
+              </p>
+            </div>
+
+            <div className="flex items-center justify-end pt-3 border-t border-slate-800">
+              <button
+                type="button"
+                onClick={() => setLastCreatedEmployee(null)}
+                className="px-5 py-2 bg-indigo-600 text-white text-xs font-semibold rounded-xl hover:bg-indigo-500 transition-colors shadow-md shadow-indigo-600/30"
+              >
+                Done
+              </button>
+            </div>
           </div>
         </div>
       )}
