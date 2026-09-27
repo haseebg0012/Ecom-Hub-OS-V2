@@ -101,75 +101,7 @@ export function getSessionStatus(session: UserSession): {
  * Generate initial seed sessions for demo business
  */
 function getInitialSeedSessions(businessId: string): UserSession[] {
-  const now = Date.now();
-  return [
-    // Sarah Townsend - Admin (Active now)
-    {
-      id: `ses-seed-001`,
-      business_id: businessId,
-      user_id: 'usr-colleague-002',
-      user_profile: {
-        id: 'usr-colleague-002',
-        email: 'sarah.t@ecometrixhub.com',
-        full_name: 'Sarah Townsend',
-        avatar_url: null,
-        created_at: new Date(now - 86400000 * 30).toISOString(),
-        updated_at: new Date().toISOString(),
-      },
-      user_role: 'Admin',
-      session_started_at: new Date(now - 1000 * 60 * 42).toISOString(), // 42 min ago
-      last_seen_at: new Date(now - 1000 * 60 * 2).toISOString(), // 2 min ago
-      session_ended_at: null,
-      end_reason: null,
-      ip_address: '192.168.1.45',
-      user_agent: 'Chrome 128.0 (macOS)',
-      created_at: new Date(now - 1000 * 60 * 42).toISOString(),
-    },
-    // Marcus Vance - Finance (Ended 2 hours ago)
-    {
-      id: `ses-seed-002`,
-      business_id: businessId,
-      user_id: 'usr-colleague-003',
-      user_profile: {
-        id: 'usr-colleague-003',
-        email: 'marcus.v@ecometrixhub.com',
-        full_name: 'Marcus Vance',
-        avatar_url: null,
-        created_at: new Date(now - 86400000 * 20).toISOString(),
-        updated_at: new Date().toISOString(),
-      },
-      user_role: 'Finance',
-      session_started_at: new Date(now - 1000 * 60 * 60 * 5).toISOString(),
-      last_seen_at: new Date(now - 1000 * 60 * 60 * 2).toISOString(),
-      session_ended_at: new Date(now - 1000 * 60 * 60 * 2).toISOString(),
-      end_reason: 'logout',
-      ip_address: '192.168.1.88',
-      user_agent: 'Firefox 129.0 (Windows)',
-      created_at: new Date(now - 1000 * 60 * 60 * 5).toISOString(),
-    },
-    // Haseeb G. - Owner (Ended yesterday)
-    {
-      id: `ses-seed-003`,
-      business_id: businessId,
-      user_id: 'usr-ecometrix-001',
-      user_profile: {
-        id: 'usr-ecometrix-001',
-        email: 'haseeb@ecometrixhub.com',
-        full_name: 'Haseeb G.',
-        avatar_url: null,
-        created_at: new Date(now - 86400000 * 60).toISOString(),
-        updated_at: new Date().toISOString(),
-      },
-      user_role: 'Owner',
-      session_started_at: new Date(now - 86400000).toISOString(),
-      last_seen_at: new Date(now - 86400000 + 1000 * 60 * 180).toISOString(),
-      session_ended_at: new Date(now - 86400000 + 1000 * 60 * 180).toISOString(),
-      end_reason: 'logout',
-      ip_address: '10.0.0.12',
-      user_agent: 'Safari 18.0 (macOS)',
-      created_at: new Date(now - 86400000).toISOString(),
-    },
-  ];
+  return [];
 }
 
 /**

@@ -330,18 +330,18 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <div className="flex items-center justify-between p-2 rounded-lg bg-white border border-[#E2E8F0]">
             <div className="min-w-0 flex-1">
               <p className="text-xs font-semibold text-[#0F172A] truncate">
-                {activeBusiness?.name || 'No business selected'}
+                {user?.full_name || user?.email || activeBusiness?.name || 'Active User'}
               </p>
-              <p className="text-[11px] text-[#64748B] flex items-center gap-1.5">
-                <span className="inline-block w-1.5 h-1.5 rounded-full bg-[#16A34A]"></span>
-                <span>Role: {activeBusiness?.role || 'Viewer'}</span>
+              <p className="text-[11px] text-[#64748B] flex items-center gap-1.5 truncate">
+                <span className="inline-block w-1.5 h-1.5 rounded-full bg-[#16A34A] shrink-0"></span>
+                <span className="truncate">{activeBusiness?.name || 'Workspace'} • <strong className="text-[#0F172A]">{activeBusiness?.role || 'Viewer'}</strong></span>
               </p>
             </div>
             <button
               id="sidebar-logout-btn"
               onClick={() => logout()}
               title="Sign out"
-              className="p-1.5 text-[#64748B] hover:text-[#DC2626] hover:bg-red-50 rounded-md transition-colors"
+              className="p-1.5 text-[#64748B] hover:text-[#DC2626] hover:bg-red-50 rounded-md transition-colors shrink-0"
             >
               <LogOut className="w-4 h-4" />
             </button>
