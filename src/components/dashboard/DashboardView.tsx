@@ -24,6 +24,7 @@ import {
 import { useAuth } from '../../lib/auth-context';
 import { useCrm } from '../../lib/crm-context';
 import { useFinance } from '../../lib/finance-context';
+import { getSupabaseClient } from '../../lib/supabase';
 import { formatGreeting } from '../../lib/utils';
 import { ActiveNavSection } from '../../types';
 
@@ -66,12 +67,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         return sum + val * getExchangeRate(l.currency, 'USD');
       }, 0);
 
-    // Total Lifetime Billed Revenue in USD
-    const totalRevenueUSD = clients.reduce((sum, c) => {
-      const rev = Number(c.total_revenue) || 0;
-      if (c.preferred_currency === 'USD') return sum + rev;
-      return sum + rev * getExchangeRate(c.preferred_currency, 'USD');
-    }, 0);
+    // Total Lifetime Billed Revenue in USD derived directly from live canonical Finance source
+    const baseRev = Number(finMetrics?.totalRevenue) || 0;
+    const baseCurr = finMetrics?.baseCurrency || 'PKR';
+    const totalRevenueUSD = baseCurr === 'USD' ? baseRev : baseRev * getExchangeRate(baseCurr, 'USD');
 
     // Pending follow-ups
     const pendingFollowups = followups
@@ -86,16 +85,39 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       totalRevenueUSD,
       pendingFollowups,
     };
-  }, [leads, clients, followups, getExchangeRate]);
+  }, [leads, clients, followups, getExchangeRate, finMetrics]);
 
   // Live dynamic project & task counters
   const [activeProjectsCount, setActiveProjectsCount] = useState<number>(0);
   const [openTasksCount, setOpenTasksCount] = useState<number>(0);
+  const [overdueTasksCount, setOverdueTasksCount] = useState<number>(0);
+  const [completedTasksCount, setCompletedTasksCount] = useState<number>(0);
 
   useEffect(() => {
-    const updateCounts = () => {
+    const today = new Date().toISOString().split('T')[0];
+    const updateCounts = async () => {
+      const bizId = activeBusiness?.id || 'biz-default';
+      const client = getSupabaseClient();
+      if (client) {
+        try {
+          const [{ data: prjs }, { data: tsks }] = await Promise.all([
+            client.from('projects').select('*').eq('business_id', bizId),
+            client.from('tasks').select('*').eq('business_id', bizId),
+          ]);
+
+          if (Array.isArray(prjs)) {
+            setActiveProjectsCount(prjs.filter((p: any) => p.status === 'Active').length);
+          }
+          if (Array.isArray(tsks)) {
+            setOpenTasksCount(tsks.filter((t: any) => t.status !== 'Done').length);
+            setOverdueTasksCount(tsks.filter((t: any) => t.deadline && t.deadline < today && t.status !== 'Done').length);
+            setCompletedTasksCount(tsks.filter((t: any) => t.status === 'Done').length);
+            return;
+          }
+        } catch {}
+      }
+
       try {
-        const bizId = activeBusiness?.id || 'biz-default';
         const rawP = localStorage.getItem(`ecomhub_projects_${bizId}`);
         if (rawP) {
           const prjs = JSON.parse(rawP);
@@ -106,13 +128,21 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         const rawT = localStorage.getItem(`ecomhub_tasks_${bizId}`);
         if (rawT) {
           const tsks = JSON.parse(rawT);
-          setOpenTasksCount(Array.isArray(tsks) ? tsks.filter((t: any) => t.status !== 'Completed').length : 0);
+          if (Array.isArray(tsks)) {
+            setOpenTasksCount(tsks.filter((t: any) => t.status !== 'Done').length);
+            setOverdueTasksCount(tsks.filter((t: any) => t.deadline && t.deadline < today && t.status !== 'Done').length);
+            setCompletedTasksCount(tsks.filter((t: any) => t.status === 'Done').length);
+          }
         } else {
           setOpenTasksCount(0);
+          setOverdueTasksCount(0);
+          setCompletedTasksCount(0);
         }
       } catch {
         setActiveProjectsCount(0);
         setOpenTasksCount(0);
+        setOverdueTasksCount(0);
+        setCompletedTasksCount(0);
       }
     };
 
@@ -120,11 +150,13 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
     window.addEventListener('ecomhub_projects_updated', updateCounts);
     window.addEventListener('ecomhub_tasks_updated', updateCounts);
+    window.addEventListener('ecomhub_finance_updated', updateCounts);
     window.addEventListener('storage', updateCounts);
 
     return () => {
       window.removeEventListener('ecomhub_projects_updated', updateCounts);
       window.removeEventListener('ecomhub_tasks_updated', updateCounts);
+      window.removeEventListener('ecomhub_finance_updated', updateCounts);
       window.removeEventListener('storage', updateCounts);
     };
   }, [activeBusiness?.id]);

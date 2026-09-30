@@ -159,6 +159,8 @@ export interface Client {
   notes: string | null;
   total_revenue?: number;
   outstanding_balance?: number;
+  originating_lead_id?: string | null;
+  source_lead_id?: string | null;
   created_at: string;
   updated_at: string;
 }

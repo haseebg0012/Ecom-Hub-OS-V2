@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   ArrowLeft,
   Building2,
@@ -20,10 +20,14 @@ import {
   AlertCircle,
   FileText,
   ExternalLink,
+  FolderKanban,
+  CheckSquare,
+  X,
 } from 'lucide-react';
 import { useCrm } from '../../lib/crm-context';
 import { useAuth } from '../../lib/auth-context';
 import { useFinance } from '../../lib/finance-context';
+import { getSupabaseClient } from '../../lib/supabase';
 import { Client, ClientStatus, ClientContact, ClientNote } from '../../types';
 import { CurrencyConverterModal } from '../common/CurrencyConverterModal';
 import { CreateInvoiceModal } from '../finance/modals/CreateInvoiceModal';
@@ -59,7 +63,16 @@ export const ClientDetailWorkspace: React.FC<ClientDetailWorkspaceProps> = ({
   const { user, members = [] } = useAuth();
   const { invoices = [], payments = [] } = useFinance();
 
-  const [activeTab, setActiveTab] = useState<'overview' | 'contacts' | 'notes' | 'timeline' | 'financials'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'projects' | 'contacts' | 'notes' | 'timeline' | 'financials'>('overview');
+
+  // Client Projects State
+  const [clientProjects, setClientProjects] = useState<any[]>([]);
+  const [showCreateProject, setShowCreateProject] = useState(false);
+  const [newProjectName, setNewProjectName] = useState('');
+  const [newProjectBudget, setNewProjectBudget] = useState('100000');
+  const [newProjectCurrency, setNewProjectCurrency] = useState('PKR');
+  const [newProjectDeadline, setNewProjectDeadline] = useState('');
+  const [newProjectDesc, setNewProjectDesc] = useState('');
 
   // Currency Converter & Finance Modals
   const [showConverter, setShowConverter] = useState(false);
@@ -139,6 +152,76 @@ export const ClientDetailWorkspace: React.FC<ClientDetailWorkspaceProps> = ({
       default:
         return 'bg-slate-100 text-slate-600 border-slate-200';
     }
+  };
+
+  // Fetch client projects
+  useEffect(() => {
+    const fetchClientProjects = async () => {
+      const clientDb = getSupabaseClient();
+      if (clientDb && clientId) {
+        try {
+          const { data } = await clientDb.from('projects').select('*').eq('client_id', clientId);
+          if (Array.isArray(data)) {
+            setClientProjects(data);
+            return;
+          }
+        } catch {}
+      }
+      try {
+        const raw = localStorage.getItem(`ecomhub_projects_${client?.business_id || 'biz-default'}`);
+        if (raw) {
+          const allP = JSON.parse(raw);
+          setClientProjects(allP.filter((p: any) => p.client_id === clientId));
+        }
+      } catch {}
+    };
+
+    fetchClientProjects();
+    window.addEventListener('ecomhub_projects_updated', fetchClientProjects);
+    return () => window.removeEventListener('ecomhub_projects_updated', fetchClientProjects);
+  }, [clientId, client?.business_id]);
+
+  // Create Project for this Client
+  const handleCreateProjectForClient = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newProjectName.trim() || !client) return;
+
+    const newProj = {
+      id: `proj-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      business_id: client.business_id,
+      client_id: client.id,
+      client_name: client.company_name,
+      name: newProjectName.trim(),
+      status: 'Active',
+      budget: Number(newProjectBudget) || 0,
+      currency: newProjectCurrency,
+      deadline: newProjectDeadline || new Date().toISOString().split('T')[0],
+      description: newProjectDesc.trim(),
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+
+    const clientDb = getSupabaseClient();
+    if (clientDb) {
+      try {
+        await clientDb.from('projects').insert([newProj]);
+      } catch (err) {
+        console.warn('Error saving client project:', err);
+      }
+    }
+
+    setClientProjects((prev) => [newProj, ...prev]);
+
+    try {
+      const raw = localStorage.getItem(`ecomhub_projects_${client.business_id}`);
+      const allP = raw ? JSON.parse(raw) : [];
+      localStorage.setItem(`ecomhub_projects_${client.business_id}`, JSON.stringify([newProj, ...allP]));
+    } catch {}
+
+    window.dispatchEvent(new Event('ecomhub_projects_updated'));
+    setShowCreateProject(false);
+    setNewProjectName('');
+    setNewProjectDesc('');
   };
 
   // Add Contact Handler
@@ -323,6 +406,7 @@ export const ClientDetailWorkspace: React.FC<ClientDetailWorkspaceProps> = ({
       <div className="border-b border-[#E2E8F0] flex items-center gap-2 overflow-x-auto text-xs font-semibold">
         {[
           { id: 'overview', label: 'Overview & Profile' },
+          { id: 'projects', label: `Projects (${clientProjects.length})` },
           { id: 'contacts', label: `Stakeholder Contacts (${clientContacts.length})` },
           { id: 'notes', label: `Strategic Notes (${clientNotes.length})` },
           { id: 'timeline', label: `Activity Timeline (${clientActivities.length})` },
@@ -535,6 +619,180 @@ export const ClientDetailWorkspace: React.FC<ClientDetailWorkspaceProps> = ({
               )}
             </div>
           </div>
+        </div>
+      )}
+
+      {/* 2. PROJECTS */}
+      {activeTab === 'projects' && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-xs font-bold text-[#0F172A] uppercase tracking-wider">
+                Client Projects & Workspaces ({clientProjects.length})
+              </h3>
+              <p className="text-[11px] text-[#64748B]">
+                Active project deliverables, milestones, and budgets associated with {client.company_name}
+              </p>
+            </div>
+            <button
+              onClick={() => setShowCreateProject(true)}
+              className="px-3 py-1.5 bg-[#4F46E5] hover:bg-[#4338CA] text-white text-xs font-semibold rounded-xl transition-colors flex items-center gap-1.5 shadow-2xs"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>New Project</span>
+            </button>
+          </div>
+
+          {clientProjects.length === 0 ? (
+            <div className="py-12 text-center bg-white rounded-2xl border border-[#E2E8F0] space-y-2">
+              <FolderKanban className="w-10 h-10 text-[#94A3B8] mx-auto" />
+              <h4 className="text-sm font-bold text-[#0F172A]">No projects created for this client yet</h4>
+              <p className="text-xs text-[#64748B] max-w-sm mx-auto">
+                Create a project workspace to track deliverables, assign tasks, and monitor budgets for {client.company_name}.
+              </p>
+              <button
+                onClick={() => setShowCreateProject(true)}
+                className="mt-2 px-3 py-1.5 bg-[#EEF2FF] text-[#4F46E5] hover:bg-[#E0E7FF] text-xs font-semibold rounded-xl inline-flex items-center gap-1"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Create First Project</span>
+              </button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {clientProjects.map((proj) => (
+                <div
+                  key={proj.id}
+                  className="bg-white p-4 rounded-xl border border-[#E2E8F0] shadow-2xs space-y-3 hover:border-[#4F46E5] transition-colors"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <h4 className="text-sm font-bold text-[#0F172A]">{proj.name}</h4>
+                    <span
+                      className={`px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wider ${
+                        proj.status === 'Active'
+                          ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                          : proj.status === 'Completed'
+                          ? 'bg-blue-50 text-blue-700 border border-blue-200'
+                          : 'bg-amber-50 text-amber-700 border border-amber-200'
+                      }`}
+                    >
+                      {proj.status}
+                    </span>
+                  </div>
+
+                  {proj.description && (
+                    <p className="text-xs text-[#475569] line-clamp-2">{proj.description}</p>
+                  )}
+
+                  <div className="pt-2 border-t border-[#F1F5F9] flex items-center justify-between text-xs text-[#64748B]">
+                    <div className="flex items-center gap-1">
+                      <DollarSign className="w-3.5 h-3.5 text-[#94A3B8]" />
+                      <span className="font-semibold text-[#0F172A]">
+                        {proj.currency || 'USD'} {Number(proj.budget || 0).toLocaleString()}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <Calendar className="w-3.5 h-3.5 text-[#94A3B8]" />
+                      <span>{proj.deadline}</span>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Modal: Create Project for Client */}
+          {showCreateProject && (
+            <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
+              <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-xl space-y-4">
+                <div className="flex items-center justify-between pb-2 border-b border-[#E2E8F0]">
+                  <h3 className="text-sm font-bold text-[#0F172A] flex items-center gap-2">
+                    <FolderKanban className="w-4 h-4 text-[#4F46E5]" />
+                    <span>Create Project for {client.company_name}</span>
+                  </h3>
+                  <button onClick={() => setShowCreateProject(false)} className="text-[#94A3B8] hover:text-[#0F172A]">
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+
+                <form onSubmit={handleCreateProjectForClient} className="space-y-3 text-xs">
+                  <div>
+                    <label className="block font-semibold text-[#0F172A] mb-1">Project Name *</label>
+                    <input
+                      type="text"
+                      required
+                      value={newProjectName}
+                      onChange={(e) => setNewProjectName(e.target.value)}
+                      placeholder="e.g. Q3 Brand Relaunch"
+                      className="w-full px-3 py-2 border border-[#E2E8F0] rounded-xl font-medium text-[#0F172A] focus:outline-none focus:border-[#4F46E5]"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block font-semibold text-[#0F172A] mb-1">Budget</label>
+                      <input
+                        type="number"
+                        value={newProjectBudget}
+                        onChange={(e) => setNewProjectBudget(e.target.value)}
+                        className="w-full px-3 py-2 border border-[#E2E8F0] rounded-xl font-medium text-[#0F172A] focus:outline-none focus:border-[#4F46E5]"
+                      />
+                    </div>
+                    <div>
+                      <label className="block font-semibold text-[#0F172A] mb-1">Currency</label>
+                      <select
+                        value={newProjectCurrency}
+                        onChange={(e) => setNewProjectCurrency(e.target.value)}
+                        className="w-full px-3 py-2 border border-[#E2E8F0] rounded-xl font-medium text-[#0F172A] focus:outline-none focus:border-[#4F46E5]"
+                      >
+                        <option value="PKR">PKR</option>
+                        <option value="USD">USD</option>
+                        <option value="EUR">EUR</option>
+                        <option value="GBP">GBP</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block font-semibold text-[#0F172A] mb-1">Deadline Date</label>
+                    <input
+                      type="date"
+                      value={newProjectDeadline}
+                      onChange={(e) => setNewProjectDeadline(e.target.value)}
+                      className="w-full px-3 py-2 border border-[#E2E8F0] rounded-xl font-medium text-[#0F172A] focus:outline-none focus:border-[#4F46E5]"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block font-semibold text-[#0F172A] mb-1">Description</label>
+                    <textarea
+                      rows={2}
+                      value={newProjectDesc}
+                      onChange={(e) => setNewProjectDesc(e.target.value)}
+                      placeholder="Key objectives and deliverables..."
+                      className="w-full px-3 py-2 border border-[#E2E8F0] rounded-xl font-medium text-[#0F172A] focus:outline-none focus:border-[#4F46E5]"
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-end gap-2 pt-3 border-t border-[#E2E8F0]">
+                    <button
+                      type="button"
+                      onClick={() => setShowCreateProject(false)}
+                      className="px-4 py-2 border border-[#E2E8F0] text-xs font-semibold text-[#64748B] rounded-xl hover:bg-[#F8FAFC]"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      className="px-4 py-2 bg-[#4F46E5] hover:bg-[#4338CA] text-white text-xs font-semibold rounded-xl shadow-xs"
+                    >
+                      Create Project
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
         </div>
       )}
 

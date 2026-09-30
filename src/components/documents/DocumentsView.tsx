@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { FileText, Plus, Download, Calendar, Tag, Search, Trash2 } from 'lucide-react';
+import { FileText, Plus, Download, Calendar, Tag, Search, Trash2, CheckCircle2 } from 'lucide-react';
 import { useAuth } from '../../lib/auth-context';
+import { usePermissions } from '../../lib/use-permissions';
 
 interface DocumentItem {
   id: string;
@@ -13,6 +14,10 @@ interface DocumentItem {
 
 export const DocumentsView: React.FC = () => {
   const { activeBusiness } = useAuth();
+  const { can, isOwner } = usePermissions();
+  const canCreate = isOwner || can('documents.create');
+  const canDelete = isOwner || can('documents.delete');
+
   const businessId = activeBusiness?.id || 'biz-default';
 
   const [documents, setDocuments] = useState<DocumentItem[]>(() => {
@@ -96,13 +101,15 @@ export const DocumentsView: React.FC = () => {
             Secure multi-tenant file repository for agreements, tax records, and proposals for {activeBusiness?.name || 'your business'}.
           </p>
         </div>
-        <button
-          onClick={() => setIsModalOpen(true)}
-          className="inline-flex items-center gap-2 px-4 py-2 bg-[#4F46E5] text-white text-xs font-semibold rounded-lg hover:bg-[#4338CA] transition-colors shadow-xs self-start"
-        >
-          <Plus className="w-4 h-4" />
-          <span>Upload Document</span>
-        </button>
+        {canCreate && (
+          <button
+            onClick={() => setIsModalOpen(true)}
+            className="inline-flex items-center gap-2 px-4 py-2 bg-[#4F46E5] text-white text-xs font-semibold rounded-lg hover:bg-[#4338CA] transition-colors shadow-xs self-start"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Upload Document</span>
+          </button>
+        )}
       </div>
 
       <div className="bg-white p-4 rounded-xl border border-[#E2E8F0] shadow-xs flex items-center gap-3">
@@ -142,17 +149,29 @@ export const DocumentsView: React.FC = () => {
 
               <div className="flex items-center gap-2 shrink-0">
                 <button
-                  onClick={() => alert(`Downloading ${doc.title}...`)}
+                  onClick={() => {
+                    const blob = new Blob([`Document: ${doc.title}\nCategory: ${doc.category}\nDate: ${doc.updated_at}`], { type: 'text/plain' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `${doc.title.toLowerCase().replace(/\s+/g, '_')}.txt`;
+                    a.click();
+                    URL.revokeObjectURL(url);
+                  }}
+                  title={`Download ${doc.title}`}
                   className="p-2 border border-[#E2E8F0] rounded-lg text-[#64748B] hover:text-[#4F46E5] hover:border-[#4F46E5] transition-colors"
                 >
                   <Download className="w-4 h-4" />
                 </button>
-                <button
-                  onClick={() => deleteDoc(doc.id)}
-                  className="p-2 border border-[#E2E8F0] rounded-lg text-[#94A3B8] hover:text-red-600 hover:border-red-200 transition-colors"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
+                {canDelete && (
+                  <button
+                    onClick={() => deleteDoc(doc.id)}
+                    title="Delete Document"
+                    className="p-2 border border-[#E2E8F0] rounded-lg text-[#94A3B8] hover:text-red-600 hover:border-red-200 transition-colors"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                )}
               </div>
             </div>
           ))}

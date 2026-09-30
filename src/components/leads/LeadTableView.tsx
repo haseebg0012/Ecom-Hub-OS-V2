@@ -16,6 +16,8 @@ import {
   MessageCircle,
 } from 'lucide-react';
 import { useCrm } from '../../lib/crm-context';
+import { usePermissions } from '../../lib/use-permissions';
+import { useAuth } from '../../lib/auth-context';
 
 interface LeadTableViewProps {
   leads: Lead[];
@@ -29,6 +31,10 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
   onDeleteLead,
 }) => {
   const { updateLeadStatus } = useCrm();
+  const { can, isOwner } = usePermissions();
+  const { members } = useAuth();
+  const canEdit = isOwner || can('crm.edit');
+  const canDelete = isOwner || can('crm.delete');
 
   const getStatusBadge = (st: LeadStatus) => {
     switch (st) {
@@ -73,6 +79,7 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
               <th className="py-3 px-4">Lead / Company</th>
               <th className="py-3 px-4">Service</th>
               <th className="py-3 px-4">Pipeline Status</th>
+              <th className="py-3 px-4">Assigned To</th>
               <th className="py-3 px-4">Budget</th>
               <th className="py-3 px-4">Contact & Outreach</th>
               <th className="py-3 px-4">Next Follow-up</th>
@@ -82,7 +89,7 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
           <tbody className="divide-y divide-slate-100 font-medium">
             {leads.length === 0 ? (
               <tr>
-                <td colSpan={7} className="py-12 text-center text-xs text-[#64748B]">
+                <td colSpan={8} className="py-12 text-center text-xs text-[#64748B]">
                   No leads found matching your criteria.
                 </td>
               </tr>
@@ -126,28 +133,63 @@ export const LeadTableView: React.FC<LeadTableViewProps> = ({
 
                     {/* Status dropdown */}
                     <td className="py-3.5 px-4" onClick={(e) => e.stopPropagation()}>
-                      <select
-                        value={lead.status}
-                        onChange={(e) => updateLeadStatus(lead.id, e.target.value as LeadStatus)}
-                        className={`px-2.5 py-1 rounded-lg text-xs font-bold border focus:outline-none cursor-pointer ${getStatusBadge(
-                          lead.status
-                        )}`}
-                      >
-                        {[
-                          'New',
-                          'Contacted',
-                          'Qualified',
-                          'Meeting',
-                          'Proposal',
-                          'Negotiation',
-                          'Won',
-                          'Lost',
-                        ].map((st) => (
-                          <option key={st} value={st}>
-                            {st}
-                          </option>
-                        ))}
-                      </select>
+                      {canEdit ? (
+                        <select
+                          value={lead.status}
+                          onChange={(e) => updateLeadStatus(lead.id, e.target.value as LeadStatus)}
+                          className={`px-2.5 py-1 rounded-lg text-xs font-bold border focus:outline-none cursor-pointer ${getStatusBadge(
+                            lead.status
+                          )}`}
+                        >
+                          {[
+                            'New',
+                            'Contacted',
+                            'Qualified',
+                            'Meeting',
+                            'Proposal',
+                            'Negotiation',
+                            'Won',
+                            'Lost',
+                          ].map((st) => (
+                            <option key={st} value={st}>
+                              {st}
+                            </option>
+                          ))}
+                        </select>
+                      ) : (
+                        <span
+                          className={`inline-block px-2.5 py-1 rounded-lg text-xs font-bold border ${getStatusBadge(
+                            lead.status
+                          )}`}
+                        >
+                          {lead.status}
+                        </span>
+                      )}
+                    </td>
+
+                    {/* Assigned Specialist */}
+                    <td className="py-3.5 px-4" onClick={(e) => e.stopPropagation()}>
+                      {lead.assigned_to ? (
+                        <div className="flex items-center gap-1.5">
+                          <div className="w-5 h-5 rounded-full bg-[#EEF2FF] text-[#4F46E5] text-[10px] font-bold flex items-center justify-center border border-[#C7D2FE]">
+                            {(() => {
+                              const m = members.find((mem) => mem.user_id === lead.assigned_to);
+                              const name = m?.profile?.full_name || m?.profile?.email || 'Assignee';
+                              return name.charAt(0).toUpperCase();
+                            })()}
+                          </div>
+                          <span className="text-xs font-medium text-[#0F172A] truncate max-w-[120px]">
+                            {(() => {
+                              const m = members.find((mem) => mem.user_id === lead.assigned_to);
+                              return m?.profile?.full_name || m?.profile?.email || 'Specialist';
+                            })()}
+                          </span>
+                        </div>
+                      ) : (
+                        <span className="inline-block px-2 py-0.5 rounded text-[10px] font-semibold text-[#64748B] bg-slate-100 border border-slate-200">
+                          Unassigned
+                        </span>
+                      )}
                     </td>
 
                     {/* Budget & Attribution */}

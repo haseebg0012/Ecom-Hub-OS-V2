@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { useCrm } from '../../lib/crm-context';
 import { useAuth } from '../../lib/auth-context';
+import { usePermissions } from '../../lib/use-permissions';
 import { Lead, LeadStatus, LeadPriority } from '../../types';
 import { LeadTableView } from './LeadTableView';
 import { LeadKanbanBoard } from './LeadKanbanBoard';
@@ -42,7 +43,8 @@ export const LeadsModuleView: React.FC<LeadsModuleViewProps> = ({
   onOpenLeadSettings,
 }) => {
   const { leads, getExchangeRate } = useCrm();
-  const { activeBusiness, members } = useAuth();
+  const { activeBusiness, members, user } = useAuth();
+  const { can } = usePermissions();
 
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(initialLeadId || null);
   const [viewMode, setViewMode] = useState<'table' | 'kanban' | 'cold_calling' | 'agents'>('table');
@@ -88,12 +90,23 @@ export const LeadsModuleView: React.FC<LeadsModuleViewProps> = ({
       const matchStatus = statusFilter === 'ALL' || l.status === statusFilter;
       const matchSource = sourceFilter === 'ALL' || l.source === sourceFilter;
       const matchPriority = priorityFilter === 'ALL' || l.priority === priorityFilter;
-      const matchAssigned = assignedFilter === 'ALL' || l.assigned_to === assignedFilter;
+
+      let matchAssigned = true;
+      if (assignedFilter === 'ALL') {
+        matchAssigned = true;
+      } else if (assignedFilter === 'MY_LEADS') {
+        matchAssigned = Boolean(user?.id && l.assigned_to === user.id);
+      } else if (assignedFilter === 'UNASSIGNED') {
+        matchAssigned = !l.assigned_to;
+      } else {
+        matchAssigned = l.assigned_to === assignedFilter;
+      }
+
       const matchAgent = agentFilter === 'ALL' || (l.agent_name && l.agent_name.trim() === agentFilter);
 
       return matchSearch && matchStatus && matchSource && matchPriority && matchAssigned && matchAgent;
     });
-  }, [leads, searchQuery, statusFilter, sourceFilter, priorityFilter, assignedFilter, agentFilter]);
+  }, [leads, searchQuery, statusFilter, sourceFilter, priorityFilter, assignedFilter, agentFilter, user?.id]);
 
   // Statistics
   const stats = useMemo(() => {
@@ -186,22 +199,26 @@ export const LeadsModuleView: React.FC<LeadsModuleViewProps> = ({
             <span>Website API</span>
           </button>
 
-          <button
-            onClick={() => setShowImportModal(true)}
-            className="px-3 py-1.5 text-xs font-semibold text-[#64748B] hover:text-[#0F172A] bg-white border border-[#E2E8F0] hover:bg-[#F8FAFC] rounded-xl transition-colors flex items-center gap-1.5 shadow-2xs"
-            title="Import leads from CSV with duplicate detection"
-          >
-            <UploadCloud className="w-3.5 h-3.5 text-[#4F46E5]" />
-            <span>Import CSV</span>
-          </button>
+          {can('crm.create') && (
+            <button
+              onClick={() => setShowImportModal(true)}
+              className="px-3 py-1.5 text-xs font-semibold text-[#64748B] hover:text-[#0F172A] bg-white border border-[#E2E8F0] hover:bg-[#F8FAFC] rounded-xl transition-colors flex items-center gap-1.5 shadow-2xs"
+              title="Import leads from CSV with duplicate detection"
+            >
+              <UploadCloud className="w-3.5 h-3.5 text-[#4F46E5]" />
+              <span>Import CSV</span>
+            </button>
+          )}
 
-          <button
-            onClick={() => setShowAddModal(true)}
-            className="px-3.5 py-1.5 text-xs font-semibold text-white bg-[#4F46E5] hover:bg-[#4338CA] rounded-xl shadow-2xs transition-colors flex items-center gap-1.5"
-          >
-            <Plus className="w-3.5 h-3.5" />
-            <span>Add Lead</span>
-          </button>
+          {can('crm.create') && (
+            <button
+              onClick={() => setShowAddModal(true)}
+              className="px-3.5 py-1.5 text-xs font-semibold text-white bg-[#4F46E5] hover:bg-[#4338CA] rounded-xl shadow-2xs transition-colors flex items-center gap-1.5"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>Add Lead</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -386,18 +403,22 @@ export const LeadsModuleView: React.FC<LeadsModuleViewProps> = ({
               ))}
             </select>
 
-            {/* Assigned Specialist */}
+            {/* Assigned Scope / Specialist Filter */}
             <select
               value={assignedFilter}
               onChange={(e) => setAssignedFilter(e.target.value)}
               className="px-2.5 py-1 bg-[#F8FAFC] border border-[#E2E8F0] rounded-lg text-xs font-medium text-[#0F172A] focus:outline-none"
             >
-              <option value="ALL">All Specialists</option>
-              {members.map((m) => (
-                <option key={m.user_id} value={m.user_id}>
-                  {m.profile?.full_name || m.profile?.email}
-                </option>
-              ))}
+              <option value="ALL">All Accessible Leads</option>
+              <option value="MY_LEADS">My Leads</option>
+              <option value="UNASSIGNED">Unassigned</option>
+              <optgroup label="Specific Specialist">
+                {members.map((m) => (
+                  <option key={m.user_id} value={m.user_id}>
+                    {m.profile?.full_name || m.profile?.email || 'Team Member'}
+                  </option>
+                ))}
+              </optgroup>
             </select>
 
             {(statusFilter !== 'ALL' ||

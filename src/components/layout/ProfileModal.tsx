@@ -22,6 +22,16 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({ isOpen, onClose }) =
   const [passwordNotice, setPasswordNotice] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [isChangingPassword, setIsChangingPassword] = useState(false);
 
+  // Sync state whenever modal opens or user updates
+  React.useEffect(() => {
+    if (isOpen && user) {
+      setFullName(user.full_name || '');
+      setAvatarUrl(user.avatar_url || '');
+      setErrorMsg('');
+      setSuccessNotice(false);
+    }
+  }, [isOpen, user]);
+
   // Transition employee status from 'Added' to 'Profile Active' when opening profile
   React.useEffect(() => {
     if (isOpen && user?.email) {

@@ -61,7 +61,7 @@ export const FinanceOverview: React.FC<FinanceOverviewProps> = ({
     return getProfitAndLossReport ? getProfitAndLossReport('this_month') : null;
   }, [getProfitAndLossReport]);
 
-  // Use authoritative trend data if available, or fallback to distributed buckets
+  // Use authoritative trend data from real transactions
   const barChartData = React.useMemo(() => {
     if (currentMonthReport?.monthlyTrend && currentMonthReport.monthlyTrend.length > 0) {
       return currentMonthReport.monthlyTrend.map((m) => ({
@@ -70,13 +70,8 @@ export const FinanceOverview: React.FC<FinanceOverviewProps> = ({
         expenses: m.expenses,
       }));
     }
-    return [
-      { label: 'W1', revenue: Math.round((metrics?.totalRevenue || 0) * 0.2), expenses: Math.round((metrics?.totalExpenses || 0) * 0.25) },
-      { label: 'W2', revenue: Math.round((metrics?.totalRevenue || 0) * 0.3), expenses: Math.round((metrics?.totalExpenses || 0) * 0.3) },
-      { label: 'W3', revenue: Math.round((metrics?.totalRevenue || 0) * 0.25), expenses: Math.round((metrics?.totalExpenses || 0) * 0.2) },
-      { label: 'W4', revenue: Math.round((metrics?.totalRevenue || 0) * 0.25), expenses: Math.round((metrics?.totalExpenses || 0) * 0.25) },
-    ];
-  }, [currentMonthReport, metrics]);
+    return [];
+  }, [currentMonthReport]);
 
   const trendData = React.useMemo(() => {
     if (currentMonthReport?.monthlyTrend && currentMonthReport.monthlyTrend.length > 0) {
@@ -85,24 +80,23 @@ export const FinanceOverview: React.FC<FinanceOverviewProps> = ({
         profit: m.profit,
       }));
     }
-    return [
-      { label: 'W1', profit: Math.round((metrics?.netProfit ?? metrics?.operatingProfit ?? 0) * 0.2) },
-      { label: 'W2', profit: Math.round((metrics?.netProfit ?? metrics?.operatingProfit ?? 0) * 0.3) },
-      { label: 'W3', profit: Math.round((metrics?.netProfit ?? metrics?.operatingProfit ?? 0) * 0.25) },
-      { label: 'W4', profit: Math.round((metrics?.netProfit ?? metrics?.operatingProfit ?? 0) * 0.25) },
-    ];
-  }, [currentMonthReport, metrics]);
+    return [];
+  }, [currentMonthReport]);
 
   // Prepare category donut data from active expenses
   const categoryMap = new Map<string, { label: string; value: number; color: string }>();
   transactions
-    .filter((t) => t.type === 'Expense' && t.status === 'Completed')
+    .filter(
+      (t) =>
+        (t.transaction_type?.toLowerCase() === 'expense' || (t as any).type === 'Expense') &&
+        (t.status?.toLowerCase() === 'completed')
+    )
     .forEach((t) => {
       const cat = categories.find((c) => c.id === t.category_id);
       const label = cat?.name || 'General Expense';
       const color = cat?.color || '#64748B';
       const current = categoryMap.get(label) || { label, value: 0, color };
-      current.value += t.base_amount || t.amount;
+      current.value += Number(t.base_amount) || Number(t.amount) || 0;
       categoryMap.set(label, current);
     });
 

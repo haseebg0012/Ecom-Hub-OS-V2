@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { useCrm } from '../../lib/crm-context';
 import { useAuth } from '../../lib/auth-context';
+import { usePermissions } from '../../lib/use-permissions';
 import { Client, ClientStatus } from '../../types';
 import { ClientDetailWorkspace } from './ClientDetailWorkspace';
 import { AddClientModal } from './AddClientModal';
@@ -114,6 +115,8 @@ const ClientsModuleInner: React.FC<ClientsModuleViewProps> = ({
     refreshCrmData,
   } = useCrm();
   const { activeBusiness, members = [] } = useAuth();
+  const { can, isOwner } = usePermissions();
+  const canCreate = isOwner || can('crm.create');
 
   const [selectedClientId, setSelectedClientId] = useState<string | null>(initialClientId || null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -301,14 +304,16 @@ const ClientsModuleInner: React.FC<ClientsModuleViewProps> = ({
             <span>Currency Calculator</span>
           </button>
 
-          <button
-            id="add-client-btn"
-            onClick={() => setShowAddModal(true)}
-            className="px-3.5 py-1.5 text-xs font-semibold text-white bg-[#4F46E5] hover:bg-[#4338CA] rounded-xl shadow-2xs transition-colors flex items-center gap-1.5"
-          >
-            <Plus className="w-3.5 h-3.5" />
-            <span>Add Client</span>
-          </button>
+          {canCreate && (
+            <button
+              id="add-client-btn"
+              onClick={() => setShowAddModal(true)}
+              className="px-3.5 py-1.5 text-xs font-semibold text-white bg-[#4F46E5] hover:bg-[#4338CA] rounded-xl shadow-2xs transition-colors flex items-center gap-1.5"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>Add Client</span>
+            </button>
+          )}
         </div>
       </div>
 

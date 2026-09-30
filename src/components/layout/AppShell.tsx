@@ -25,8 +25,8 @@ import { useAuth } from '../../lib/auth-context';
 import { resolveRoute, getPathForSection } from '../../lib/router';
 
 export const AppShell: React.FC = () => {
-  const { role } = usePermissions();
-  const { viewingSupportBusinessId, endSupportWorkspaceView, activeBusiness } = useAuth();
+  const { role, roles, effectiveAccess } = usePermissions();
+  const { user, viewingSupportBusinessId, endSupportWorkspaceView, activeBusiness } = useAuth();
 
   const [activeSection, setActiveSection] = useState<ActiveNavSection>('dashboard');
   const [financeSubTab, setFinanceSubTab] = useState<string>('overview');
@@ -35,10 +35,11 @@ export const AppShell: React.FC = () => {
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState<boolean>(false);
   const [targetLeadId, setTargetLeadId] = useState<string | null>(null);
   const [targetClientId, setTargetClientId] = useState<string | null>(null);
+  const [targetTaskId, setTargetTaskId] = useState<string | null>(null);
 
-  // Apply route resolution given current browser pathname and user's role
-  const applyRoute = useCallback((pathname: string, userRole: typeof role) => {
-    const res = resolveRoute(pathname, userRole);
+  // Apply route resolution given current browser pathname and user's roles
+  const applyRoute = useCallback((pathname: string, userRoles: string[], currentUser?: any) => {
+    const res = resolveRoute(pathname, userRoles as any, currentUser);
     if (res.isUnauthorized) {
       setIsUnauthorized(true);
       setAttemptedPath(res.attemptedPath);
@@ -59,6 +60,11 @@ export const AppShell: React.FC = () => {
       } else {
         setTargetLeadId(null);
       }
+      if (res.section === 'tasks') {
+        setTargetTaskId(res.entityId || null);
+      } else {
+        setTargetTaskId(null);
+      }
       if (res.subTab) {
         setFinanceSubTab(res.subTab);
       }
@@ -67,15 +73,15 @@ export const AppShell: React.FC = () => {
 
   // Listen to browser popstate (Back/Forward navigation) & initial mount
   useEffect(() => {
-    applyRoute(window.location.pathname, role);
+    applyRoute(window.location.pathname, roles, user);
 
     const handlePopState = () => {
-      applyRoute(window.location.pathname, role);
+      applyRoute(window.location.pathname, roles, user);
     };
 
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
-  }, [role, applyRoute]);
+  }, [roles, user, applyRoute]);
 
   // Handle direct navigation to any path
   const handleNavigatePath = (path: string, replace = false) => {
@@ -84,7 +90,7 @@ export const AppShell: React.FC = () => {
     } else {
       window.history.pushState({}, '', path);
     }
-    applyRoute(path, role);
+    applyRoute(path, roles, user);
   };
 
   const handleOpenLead = (leadId: string) => {
@@ -97,12 +103,19 @@ export const AppShell: React.FC = () => {
     handleNavigatePath(`/clients/${clientId}`);
   };
 
+  const handleOpenTask = (taskId: string) => {
+    setTargetTaskId(taskId);
+    handleNavigatePath(`/tasks/${taskId}`);
+  };
+
   const handleSelectSection = (section: ActiveNavSection) => {
     if (section === 'leads') setTargetLeadId(null);
     if (section === 'clients') setTargetClientId(null);
-    if (section !== 'leads' && section !== 'clients') {
+    if (section === 'tasks') setTargetTaskId(null);
+    if (section !== 'leads' && section !== 'clients' && section !== 'tasks') {
       setTargetLeadId(null);
       setTargetClientId(null);
+      setTargetTaskId(null);
     }
 
     let subTab: string | undefined = undefined;
@@ -178,9 +191,9 @@ export const AppShell: React.FC = () => {
           />
         );
       case 'projects':
-        return <ProjectsView />;
+        return <ProjectsView onOpenClient={handleOpenClient} onOpenTask={handleOpenTask} />;
       case 'tasks':
-        return <TasksView />;
+        return <TasksView initialTaskId={targetTaskId} />;
       case 'team-members-roles':
         return <TeamMembersRolesView />;
       case 'documents':

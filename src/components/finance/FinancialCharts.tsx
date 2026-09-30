@@ -53,14 +53,14 @@ export const RevenueExpenseBarChart: React.FC<{
       </div>
 
       <div className="h-56 flex items-end gap-3 pt-6 pb-2 px-2 border-b border-[#E2E8F0] relative">
-        {data.length === 0 ? (
+        {data.length === 0 || data.every((d) => d.revenue === 0 && d.expenses === 0) ? (
           <div className="w-full h-full flex items-center justify-center text-xs text-[#94A3B8]">
-            No financial activity in this period.
+            No financial activity recorded in this period.
           </div>
         ) : (
           data.map((item, idx) => {
-            const revHeight = (item.revenue / maxValue) * 100;
-            const expHeight = (item.expenses / maxValue) * 100;
+            const revHeight = item.revenue > 0 ? Math.max(4, (item.revenue / maxValue) * 100) : 0;
+            const expHeight = item.expenses > 0 ? Math.max(4, (item.expenses / maxValue) * 100) : 0;
             const isHovered = hoveredIdx === idx;
 
             return (
@@ -90,14 +90,14 @@ export const RevenueExpenseBarChart: React.FC<{
                 <div className="w-full flex items-end justify-center gap-1 h-full">
                   {/* Revenue Bar */}
                   <div
-                    style={{ height: `${Math.max(4, revHeight)}%` }}
+                    style={{ height: `${revHeight}%` }}
                     className={`w-1/2 max-w-[20px] rounded-t-sm transition-all duration-300 ${
                       isHovered ? 'bg-[#4338CA]' : 'bg-[#4F46E5]'
                     }`}
                   />
                   {/* Expense Bar */}
                   <div
-                    style={{ height: `${Math.max(4, expHeight)}%` }}
+                    style={{ height: `${expHeight}%` }}
                     className={`w-1/2 max-w-[20px] rounded-t-sm transition-all duration-300 ${
                       isHovered ? 'bg-[#E11D48]' : 'bg-[#F43F5E]'
                     }`}
@@ -123,10 +123,10 @@ export const ProfitTrendLineChart: React.FC<{
 }> = ({ data, currencySymbol = 'PKR' }) => {
   const [hoveredPoint, setHoveredPoint] = useState<TrendDataPoint | null>(null);
 
-  if (!data || data.length === 0) {
+  if (!data || data.length === 0 || data.every((d) => d.profit === 0)) {
     return (
       <div className="h-56 flex items-center justify-center text-xs text-[#94A3B8]">
-        No profit trend data available for selected range.
+        No profit activity recorded in this period.
       </div>
     );
   }
@@ -382,7 +382,7 @@ export const ClientRevenueBarChart: React.FC<{
   clients: ClientRevenuePoint[];
   currencySymbol?: string;
 }> = ({ clients, currencySymbol = 'PKR' }) => {
-  if (!clients || clients.length === 0) {
+  if (!clients || clients.length === 0 || clients.every((c) => c.amount === 0)) {
     return (
       <div className="h-52 flex items-center justify-center text-xs text-[#94A3B8]">
         No client revenue recorded yet.
@@ -395,7 +395,7 @@ export const ClientRevenueBarChart: React.FC<{
   return (
     <div className="space-y-3">
       {clients.map((c, idx) => {
-        const barWidth = Math.max(5, (c.amount / maxAmt) * 100);
+        const barWidth = c.amount > 0 ? Math.max(5, (c.amount / maxAmt) * 100) : 0;
 
         return (
           <div key={idx} className="space-y-1">

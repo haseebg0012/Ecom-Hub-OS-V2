@@ -235,30 +235,77 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           const isVerified = Boolean(session.user.email_confirmed_at);
           setIsEmailVerified(isVerified);
 
+          let resolvedFullName = session.user.user_metadata?.full_name;
+          let resolvedAvatarUrl = session.user.user_metadata?.avatar_url || null;
+
+          // Attempt to query canonical public.profiles table
+          try {
+            const { data: dbProfile, error: dbProfileErr } = await client
+              .from('profiles')
+              .select('*')
+              .eq('id', session.user.id)
+              .maybeSingle();
+
+            if (!dbProfileErr && dbProfile) {
+              if (dbProfile.full_name) resolvedFullName = dbProfile.full_name;
+              if (dbProfile.avatar_url) resolvedAvatarUrl = dbProfile.avatar_url;
+            }
+          } catch (e) {
+            console.warn('Could not query public.profiles:', e);
+          }
+
           const currentProfile: Profile = {
             id: session.user.id,
             email: session.user.email || '',
-            full_name: session.user.user_metadata?.full_name || session.user.email?.split('@')[0] || 'User',
-            avatar_url: session.user.user_metadata?.avatar_url || null,
+            full_name: resolvedFullName || session.user.email?.split('@')[0] || 'User',
+            avatar_url: resolvedAvatarUrl,
             created_at: session.user.created_at,
             updated_at: new Date().toISOString(),
             email_confirmed_at: session.user.email_confirmed_at || null,
           };
 
           setUser(currentProfile);
+          localStorage.setItem(LOCAL_STORAGE_SESSION_KEY, JSON.stringify(currentProfile));
 
           // Fetch businesses through membership
           const { data: membershipData } = await client
             .from('business_members')
-            .select('role, businesses (*)')
+            .select('id, business_id, role, businesses (*)')
             .eq('user_id', currentProfile.id);
 
+          // Authoritative multi-role lookup directly from database business_member_roles table
+          let dbRoleRows: any[] = [];
+          try {
+            const { data: bmrData } = await client
+              .from('business_member_roles')
+              .select('id, business_id, role_key')
+              .eq('user_id', currentProfile.id);
+            if (bmrData && Array.isArray(bmrData)) {
+              dbRoleRows = bmrData;
+            }
+          } catch (bmrErr) {
+            console.warn('[Session Restore] business_member_roles query notice:', bmrErr);
+          }
+
           if (membershipData && membershipData.length > 0) {
-            const userBusinesses: BusinessWithRole[] = membershipData.map((m: any) => ({
-              ...m.businesses,
-              default_currency: resolveCurrency(m.businesses?.default_currency || m.businesses?.currency),
-              role: m.role as BusinessRole,
-            }));
+            const userBusinesses: BusinessWithRole[] = membershipData.map((m: any) => {
+              const matchedDbRoles = dbRoleRows
+                .filter((r) => !r.business_id || r.business_id === (m.businesses?.id || m.business_id))
+                .map((r) => r.role_key as BusinessRole);
+
+              const authoritativeRoles: BusinessRole[] = matchedDbRoles.length > 0
+                ? matchedDbRoles
+                : (session.user.user_metadata?.roles && Array.isArray(session.user.user_metadata.roles) && session.user.user_metadata.roles.length > 0)
+                  ? session.user.user_metadata.roles
+                  : [m.role as BusinessRole];
+
+              return {
+                ...m.businesses,
+                default_currency: resolveCurrency(m.businesses?.default_currency || m.businesses?.currency),
+                role: authoritativeRoles[0] || (m.role as BusinessRole),
+                roles: authoritativeRoles,
+              };
+            });
 
             setBusinesses(userBusinesses);
 
@@ -269,19 +316,27 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             // Fetch members of active business
             const { data: bizMembers } = await client
               .from('business_members')
-              .select('id, user_id, business_id, role, created_at')
+              .select('id, user_id, business_id, role, created_at, profiles(id, email, full_name, avatar_url)')
               .eq('business_id', foundActive.id);
 
             if (bizMembers) {
               setMembers(
-                bizMembers.map((m: any) => ({
-                  id: m.id,
-                  user_id: m.user_id,
-                  business_id: m.business_id,
-                  role: m.role,
-                  created_at: m.created_at,
-                  profile: { id: m.user_id, full_name: 'Member', email: '' },
-                }))
+                bizMembers.map((m: any) => {
+                  const prof = m.profiles || {};
+                  return {
+                    id: m.id,
+                    user_id: m.user_id,
+                    business_id: m.business_id,
+                    role: m.role,
+                    created_at: m.created_at,
+                    profile: {
+                      id: m.user_id,
+                      full_name: prof.full_name || 'Member',
+                      email: prof.email || '',
+                      avatar_url: prof.avatar_url || null,
+                    },
+                  };
+                })
               );
             }
           }
@@ -324,6 +379,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             ) {
               userRole = 'Owner';
               userRoles = ['Owner', 'Admin'];
+
+              try {
+                const rawOwner = localStorage.getItem('ecomhub_owner_profile');
+                if (rawOwner) {
+                  const parsedOwner = JSON.parse(rawOwner);
+                  if (parsedOwner.full_name) localUser.full_name = parsedOwner.full_name;
+                  if (parsedOwner.avatar_url) localUser.avatar_url = parsedOwner.avatar_url;
+                }
+              } catch {}
             }
           }
 
@@ -554,19 +618,127 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } catch {}
 
     if (!isKnownEmail) {
+      const client = await resolveClient();
+      if (client) {
+        try {
+          const { data, error } = await client.auth.signInWithPassword({
+            email: cleanEmail,
+            password: pass,
+          });
+          if (!error && data?.session) {
+            await initializeAuth();
+            return { success: true };
+          }
+        } catch {}
+      }
       return { success: false, error: 'Account does not exist.' };
     }
 
-    // 1. Employee Sub-Profile / Registered Employee Login
+    // 1. Employee Sub-Profile / Registered Employee Login (Database Authoritative Flow)
     try {
       let foundEmp: any = null;
-      try {
-        const rawEmps = localStorage.getItem('ecomhub_employees');
-        if (rawEmps) {
-          const emps = JSON.parse(rawEmps);
-          foundEmp = emps.find((e: any) => e.email?.trim().toLowerCase() === cleanEmail);
+      let dbRolesLoaded: BusinessRole[] = [];
+
+      // Always execute authoritative database lookup first:
+      // Supabase -> profiles -> business_members -> business_member_roles -> load ALL assigned roles
+      const client = await resolveClient();
+      if (client) {
+        try {
+          const { data: prof } = await client
+            .from('profiles')
+            .select('id, email, full_name, avatar_url')
+            .eq('email', cleanEmail)
+            .maybeSingle();
+
+          if (prof) {
+            const { data: mem } = await client
+              .from('business_members')
+              .select('id, user_id, business_id, role')
+              .eq('user_id', prof.id)
+              .maybeSingle();
+
+            if (mem) {
+              // Query canonical business_member_roles table for all assigned roles
+              const { data: bmrRows } = await client
+                .from('business_member_roles')
+                .select('id, role_key, business_id')
+                .eq('user_id', prof.id);
+
+              if (bmrRows && Array.isArray(bmrRows) && bmrRows.length > 0) {
+                dbRolesLoaded = bmrRows
+                  .filter((r) => !r.business_id || r.business_id === mem.business_id)
+                  .map((r) => r.role_key as BusinessRole);
+              }
+
+              // Check auth_users for stored password
+              let dbPassword = 'Admin1234!';
+              try {
+                const { data: authUser } = await client
+                  .from('auth_users')
+                  .select('password')
+                  .eq('email', cleanEmail)
+                  .maybeSingle();
+                if (authUser?.password) {
+                  dbPassword = authUser.password;
+                }
+              } catch {}
+
+              const finalRoles: BusinessRole[] = dbRolesLoaded.length > 0
+                ? dbRolesLoaded
+                : [mem.role as BusinessRole || 'Employee'];
+
+              foundEmp = {
+                id: `emp-${mem.id}`,
+                user_id: prof.id,
+                business_id: mem.business_id,
+                name: prof.full_name || 'Team Member',
+                email: prof.email,
+                role: finalRoles[0] || mem.role,
+                roles: finalRoles,
+                password: dbPassword,
+                temp_password: dbPassword,
+              };
+            }
+          }
+        } catch (dbErr) {
+          console.warn('[Login Auth DB Lookup Notice]:', dbErr);
         }
-      } catch {}
+      }
+
+      // If client query yielded nothing, check server /api/employees endpoint
+      if (!foundEmp) {
+        try {
+          const apiRes = await fetch('/api/employees', {
+            headers: {
+              'x-business-id': 'biz-ecometrix-001',
+              'x-user-role': 'Owner',
+            }
+          });
+          if (apiRes.ok) {
+            const apiEmps = await apiRes.json();
+            if (Array.isArray(apiEmps)) {
+              const matched = apiEmps.find((e: any) => e.email?.toLowerCase() === cleanEmail);
+              if (matched) {
+                foundEmp = matched;
+                if (Array.isArray(matched.roles) && matched.roles.length > 0) {
+                  dbRolesLoaded = matched.roles;
+                }
+              }
+            }
+          }
+        } catch {}
+      }
+
+      // If still not found, check localStorage as offline fallback only
+      if (!foundEmp) {
+        try {
+          const rawEmps = localStorage.getItem('ecomhub_employees');
+          if (rawEmps) {
+            const emps = JSON.parse(rawEmps);
+            foundEmp = emps.find((e: any) => e.email?.trim().toLowerCase() === cleanEmail);
+          }
+        } catch {}
+      }
 
       if (foundEmp) {
         const expectedPass = foundEmp.password || foundEmp.temp_password || 'Admin1234!';
@@ -574,30 +746,34 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           return { success: false, error: 'Invalid credentials' };
         }
 
-        // Update employee status to 'Online'
+        // Authoritative roles: loaded directly from database business_member_roles table
+        const empRoles: BusinessRole[] = (dbRolesLoaded.length > 0)
+          ? dbRolesLoaded
+          : (foundEmp.roles && foundEmp.roles.length > 0)
+            ? foundEmp.roles
+            : (foundEmp.role ? [foundEmp.role] : ['Employee']);
+        const primaryRole: BusinessRole = empRoles[0] || foundEmp.role || 'Employee';
+
+        // Update employee status to 'Online' in local storage
         try {
           const rawEmps = localStorage.getItem('ecomhub_employees');
-          if (rawEmps) {
-            const emps = JSON.parse(rawEmps);
-            const updatedEmps = emps.map((e: any) => {
-              if (e.email?.toLowerCase() === cleanEmail) {
-                return {
-                  ...e,
-                  status: 'Online',
-                  lastLogin: 'Just now'
-                };
-              }
-              return e;
-            });
-            localStorage.setItem('ecomhub_employees', JSON.stringify(updatedEmps));
-            window.dispatchEvent(new Event('ecomhub_employees_updated'));
+          let empsList = rawEmps ? JSON.parse(rawEmps) : [];
+          const existingIdx = empsList.findIndex((e: any) => e.email?.toLowerCase() === cleanEmail);
+          const updatedEmpObj = {
+            ...foundEmp,
+            role: primaryRole,
+            roles: empRoles,
+            status: 'Online',
+            lastLogin: 'Just now'
+          };
+          if (existingIdx >= 0) {
+            empsList[existingIdx] = { ...empsList[existingIdx], ...updatedEmpObj };
+          } else {
+            empsList.push(updatedEmpObj);
           }
+          localStorage.setItem('ecomhub_employees', JSON.stringify(empsList));
+          window.dispatchEvent(new Event('ecomhub_employees_updated'));
         } catch {}
-
-        const empRoles: BusinessRole[] = (foundEmp.roles && foundEmp.roles.length > 0)
-          ? foundEmp.roles
-          : (foundEmp.role ? [foundEmp.role] : ['Employee']);
-        const primaryRole: BusinessRole = foundEmp.role || empRoles[0] || 'Employee';
 
         const empProfile: Profile = {
           id: foundEmp.user_id || foundEmp.id,
@@ -644,11 +820,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return { success: false, error: 'Invalid credentials' };
       }
 
+      let ownerFullName = 'Haseeb G.';
+      let ownerAvatar: string | null = null;
+      try {
+        const rawOwner = localStorage.getItem('ecomhub_owner_profile');
+        if (rawOwner) {
+          const parsedOwner = JSON.parse(rawOwner);
+          if (parsedOwner.full_name) ownerFullName = parsedOwner.full_name;
+          if (parsedOwner.avatar_url) ownerAvatar = parsedOwner.avatar_url;
+        }
+      } catch {}
+
       const adminProfile: Profile = {
         id: 'usr-ecometrix-001',
         email: cleanEmail,
-        full_name: 'Ecometrix Hub Admin',
-        avatar_url: null,
+        full_name: ownerFullName,
+        avatar_url: ownerAvatar,
         created_at: new Date('2025-01-15T09:00:00Z').toISOString(),
         updated_at: new Date().toISOString(),
         email_confirmed_at: new Date().toISOString(),
@@ -916,6 +1103,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
 
       if (authData.user) {
+        try {
+          const rawUsers = localStorage.getItem('ecomhub_registered_users');
+          const regUsers = rawUsers ? JSON.parse(rawUsers) : [];
+          if (!regUsers.some((u: any) => u.email?.toLowerCase() === cleanEmail)) {
+            regUsers.push({
+              id: authData.user.id,
+              email: cleanEmail,
+              password: pass,
+              full_name: fullName.trim(),
+              business_name: businessName.trim() || 'Ecometrix Hub',
+              role: 'Owner',
+              created_at: new Date().toISOString(),
+            });
+            localStorage.setItem('ecomhub_registered_users', JSON.stringify(regUsers));
+          }
+        } catch {}
+
         // Create initial business with schema column resilience
         const initialCurrency = DEFAULT_CURRENCY;
         const { data: newBiz, error: bizError } = await insertResilientBusiness(client, {
@@ -1272,18 +1476,45 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   // Update Profile
-  const updateProfile = async (updates: Partial<Profile>) => {
+  const updateProfile = async (updates: Partial<Profile>): Promise<{ success: boolean; error?: string }> => {
     if (!user) return { success: false, error: 'No authenticated user' };
 
     const client = getSupabaseClient();
     if (client) {
-      const { error } = await client.auth.updateUser({
-        data: updates,
-      });
+      try {
+        const { data: { session } } = await client.auth.getSession();
+        const effectiveId = session?.user?.id || user.id;
 
-      if (error) return { success: false, error: error.message };
-      await initializeAuth();
-      return { success: true };
+        // 1. Update Supabase Auth user metadata
+        const { error: authErr } = await client.auth.updateUser({
+          data: updates,
+        });
+
+        // 2. Update/upsert the canonical public.profiles table
+        const profilePayload: any = {
+          id: effectiveId,
+          email: user.email,
+          updated_at: new Date().toISOString(),
+        };
+        if (updates.full_name !== undefined) profilePayload.full_name = updates.full_name;
+        if (updates.avatar_url !== undefined) profilePayload.avatar_url = updates.avatar_url;
+
+        const { error: profileErr } = await client
+          .from('profiles')
+          .upsert(profilePayload, { onConflict: 'id' });
+
+        if (profileErr) {
+          console.warn('[Supabase Profiles Upsert Error]:', profileErr.message);
+          // Fallback to update with .eq('id', effectiveId)
+          await client.from('profiles').update(profilePayload).eq('id', effectiveId);
+        }
+
+        if (authErr && profileErr) {
+          console.error('[Supabase Auth/Profile Update Failure]:', authErr.message, profileErr?.message);
+        }
+      } catch (err: any) {
+        console.warn('Supabase profile update warning:', err);
+      }
     }
 
     try {
@@ -1294,9 +1525,36 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       };
       setUser(updatedUser);
       localStorage.setItem(LOCAL_STORAGE_SESSION_KEY, JSON.stringify(updatedUser));
+
+      if (user.email === 'haseebg0012@gmail.com' || user.id === 'usr-ecometrix-001') {
+        localStorage.setItem(
+          'ecomhub_owner_profile',
+          JSON.stringify({
+            full_name: updatedUser.full_name,
+            avatar_url: updatedUser.avatar_url,
+          })
+        );
+      }
+
+      // Sync employee profile if active user is an employee
+      try {
+        const rawEmps = localStorage.getItem('ecomhub_employees');
+        if (rawEmps) {
+          const emps = JSON.parse(rawEmps);
+          const updatedEmps = emps.map((e: any) =>
+            e.email?.toLowerCase() === user.email.toLowerCase()
+              ? { ...e, name: updatedUser.full_name, avatar_url: updatedUser.avatar_url }
+              : e
+          );
+          localStorage.setItem('ecomhub_employees', JSON.stringify(updatedEmps));
+          window.dispatchEvent(new Event('ecomhub_employees_updated'));
+        }
+      } catch {}
+
+      window.dispatchEvent(new CustomEvent('ecomhub_profile_updated', { detail: updatedUser }));
       return { success: true };
     } catch (err: any) {
-      return { success: false, error: err.message };
+      return { success: false, error: err.message || 'Failed to update profile' };
     }
   };
 
@@ -1304,10 +1562,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const inviteMember = async (email: string, fullName: string, role: BusinessRole) => {
     if (!activeBusiness) return { success: false, error: 'No active business selected' };
 
+    const cleanEmail = email.trim().toLowerCase();
+    const cleanName = fullName.trim() || 'Team Member';
     const newProfile: Profile = {
-      id: `usr-${Date.now()}`,
-      email,
-      full_name: fullName,
+      id: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `usr-${Date.now()}`,
+      email: cleanEmail,
+      full_name: cleanName,
       avatar_url: null,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
@@ -1321,6 +1581,31 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       created_at: new Date().toISOString(),
       profile: newProfile,
     };
+
+    // 1. Persist to Supabase if connected
+    const client = await resolveClient();
+    if (client) {
+      try {
+        await client.from('profiles').upsert({
+          id: newProfile.id,
+          email: cleanEmail,
+          full_name: cleanName,
+          updated_at: new Date().toISOString(),
+        }, { onConflict: 'id' });
+
+        const validDbRole = ['Owner', 'Admin', 'Manager', 'Finance', 'Sales', 'Viewer'].includes(role)
+          ? role
+          : 'Employee';
+
+        await client.from('business_members').upsert({
+          user_id: newProfile.id,
+          business_id: activeBusiness.id,
+          role: validDbRole,
+        }, { onConflict: 'user_id,business_id' });
+      } catch (dbErr) {
+        console.warn('[inviteMember Supabase Persistence Notice]:', dbErr);
+      }
+    }
 
     try {
       const rawMem = localStorage.getItem(LOCAL_STORAGE_MEMBERS_KEY);

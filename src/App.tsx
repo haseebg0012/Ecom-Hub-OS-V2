@@ -18,7 +18,6 @@ import { AcceptInvitationView } from './components/employees/AcceptInvitationVie
 import { PlatformAdminShell } from './components/platform/PlatformAdminShell';
 import { ErrorBoundary } from './components/common/ErrorBoundary';
 import { Loader2, ShieldAlert } from 'lucide-react';
-import { clearAllWorkspaceData } from './lib/clear-data';
 
 function getPublicLeadEntryToken(): string | null {
   if (typeof window === 'undefined') return null;
@@ -186,15 +185,6 @@ function AppContent() {
 }
 
 export default function App() {
-  useEffect(() => {
-    try {
-      if (typeof window !== 'undefined' && !localStorage.getItem('ecomhub_zero_demo_data_v2')) {
-        clearAllWorkspaceData();
-        localStorage.setItem('ecomhub_zero_demo_data_v2', 'true');
-      }
-    } catch {}
-  }, []);
-
   const [publicFormToken, setPublicFormToken] = useState<string | null>(() => getPublicLeadEntryToken());
   const [isAcceptInvite, setIsAcceptInvite] = useState<boolean>(() => checkIsAcceptInvitation());
   const [isAuthCallback, setIsAuthCallback] = useState<boolean>(() => checkIsAuthCallback());

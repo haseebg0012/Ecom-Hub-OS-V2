@@ -18,11 +18,21 @@ import {
   ChevronUp,
   Layout,
   Lock,
-  Key
+  Key,
+  Eye,
+  EyeOff,
+  RefreshCw,
+  AlertCircle,
+  Loader2
 } from 'lucide-react';
+import { createClient } from '@supabase/supabase-js';
 import { useAuth } from '../../lib/auth-context';
+import { getSupabaseClient } from '../../lib/supabase';
 import { BusinessRole } from '../../types';
 import { syncEmployeeToLeadAgent } from '../../lib/lead-entry-service';
+import { usePermissions } from '../../lib/use-permissions';
+import { UnauthorizedView } from '../unauthorized/UnauthorizedView';
+import { resolveRoleDefinition } from '../../lib/role-normalizer';
 
 interface RoleConfigItem {
   key: string;
@@ -70,7 +80,12 @@ const SIDEBAR_UI_MODULES = [
 const ACTIONS = ['view', 'create', 'edit', 'delete', 'export'] as const;
 
 export const TeamMembersRolesView: React.FC = () => {
-  const { activeBusiness, inviteMember } = useAuth();
+  const { user, activeBusiness, inviteMember } = useAuth();
+  const { isOwner, isAdmin, can, effectiveAccess } = usePermissions();
+
+  const canViewTeam = isOwner || isAdmin || (effectiveAccess.canAccessTab('team-members-roles') && can('team_roles.view'));
+  const canManageTeam = isOwner || isAdmin || can('team_roles.edit') || can('team_roles.create');
+  const canEditPermissions = isOwner || isAdmin || can('team_roles.edit');
 
   // Local employees state
   const [employees, setEmployees] = useState<any[]>([]);
@@ -221,12 +236,16 @@ export const TeamMembersRolesView: React.FC = () => {
     name: '',
     email: '',
     password: 'Admin1234!',
-    role: 'Admin' as BusinessRole,
-    roles: ['Admin'] as string[],
-    jobTitle: 'System Administrator',
-    department: 'Executive / IT',
-    phone: ''
+    role: 'Sales' as BusinessRole,
+    roles: ['Sales'] as string[],
+    jobTitle: 'Sales Representative',
+    department: 'Sales & Growth',
+    phone: '',
+    showAddRoles: false,
   });
+  const [isSubmittingAdd, setIsSubmittingAdd] = useState(false);
+  const [addFormError, setAddFormError] = useState<string | null>(null);
+  const [showAddPassword, setShowAddPassword] = useState(false);
 
   // Edit Employee Form State
   const [editForm, setEditForm] = useState({
@@ -245,7 +264,122 @@ export const TeamMembersRolesView: React.FC = () => {
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [matrixSaveStatus, setMatrixSaveStatus] = useState<string | null>(null);
 
-  // Load employees & matrices from localStorage
+  // Fetch employees from Supabase + Server API with local fallback
+  const fetchEmployees = async () => {
+    try {
+      const client = getSupabaseClient();
+      let dbMembers: any[] = [];
+      let dbRoleRows: any[] = [];
+      const currentBizId = activeBusiness?.id || 'biz-ecometrix-001';
+
+      if (client && currentBizId) {
+        try {
+          const { data, error } = await client
+            .from('business_members')
+            .select('id, user_id, business_id, role, created_at, profiles(id, email, full_name, avatar_url)')
+            .eq('business_id', currentBizId);
+          if (!error && data && data.length > 0) {
+            dbMembers = data;
+          }
+        } catch (dbErr) {
+          console.warn('[Supabase DB Members Query Notice]:', dbErr);
+        }
+
+        try {
+          const { data: rData } = await client
+            .from('business_member_roles')
+            .select('id, user_id, business_id, role_key')
+            .eq('business_id', currentBizId);
+          if (rData && Array.isArray(rData)) {
+            dbRoleRows = rData;
+          }
+        } catch (rErr) {
+          console.warn('[Supabase DB Member Roles Query Notice]:', rErr);
+        }
+      }
+
+      let apiEmps: any[] = [];
+      try {
+        const res = await fetch('/api/employees', {
+          headers: {
+            'Authorization': `Bearer user:${user?.id || 'usr-ecometrix-001'}`,
+            'x-business-id': currentBizId,
+            'x-user-id': user?.id || 'usr-ecometrix-001',
+            'x-user-role': activeBusiness?.role || 'Owner',
+          }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (Array.isArray(data)) apiEmps = data;
+        }
+      } catch {}
+
+      let localEmps: any[] = [];
+      try {
+        const raw = localStorage.getItem('ecomhub_employees');
+        if (raw) localEmps = JSON.parse(raw);
+      } catch {}
+
+      const allMap = new Map<string, any>();
+
+      dbMembers.forEach((m: any) => {
+        const prof = m.profiles || {};
+        const email = (prof.email || '').trim().toLowerCase();
+        if (!email) return;
+        const matchLocal = localEmps.find((e: any) => e.email?.toLowerCase() === email || e.user_id === m.user_id);
+        const matchApi = apiEmps.find((e: any) => e.email?.toLowerCase() === email || e.user_id === m.user_id);
+        const bmrRoles = dbRoleRows.filter((r) => r.user_id === m.user_id).map((r) => r.role_key);
+        const roles = bmrRoles.length > 0
+          ? bmrRoles
+          : (matchApi?.roles && matchApi.roles.length > 0
+              ? matchApi.roles
+              : (matchLocal?.roles && matchLocal.roles.length > 0
+                  ? matchLocal.roles
+                  : [m.role || 'Employee']));
+        allMap.set(email, {
+          id: matchLocal?.id || matchApi?.id || `emp-${m.id}`,
+          business_id: m.business_id || currentBizId,
+          user_id: m.user_id,
+          name: prof.full_name || matchLocal?.name || matchApi?.name || 'Team Member',
+          email: email,
+          role: m.role || matchLocal?.role || matchApi?.role || 'Employee',
+          roles: roles,
+          jobTitle: matchLocal?.jobTitle || matchLocal?.job_title || matchApi?.job_title || 'Team Member',
+          department: matchLocal?.department || matchApi?.department || 'Operations',
+          phone: matchLocal?.phone || matchApi?.phone || '',
+          password: matchLocal?.password || matchLocal?.temp_password || matchApi?.temp_password || 'Admin1234!',
+          temp_password: matchLocal?.temp_password || matchLocal?.password || matchApi?.temp_password || 'Admin1234!',
+          status: matchLocal?.status || matchApi?.status || 'Active',
+          lastLogin: matchLocal?.lastLogin || matchApi?.last_login || 'Never',
+          performedTasksCount: matchLocal?.performedTasksCount || 0,
+          created_at: m.created_at || matchLocal?.created_at || new Date().toISOString(),
+        });
+      });
+
+      apiEmps.forEach((e: any) => {
+        if (e.email && !allMap.has(e.email.toLowerCase())) {
+          allMap.set(e.email.toLowerCase(), {
+            ...e,
+            roles: e.roles || [e.role || 'Employee'],
+          });
+        }
+      });
+
+      localEmps.forEach((e: any) => {
+        if (e.email && !allMap.has(e.email.toLowerCase())) {
+          allMap.set(e.email.toLowerCase(), e);
+        }
+      });
+
+      const merged = Array.from(allMap.values());
+      setEmployees(merged);
+      localStorage.setItem('ecomhub_employees', JSON.stringify(merged));
+    } catch (err) {
+      console.warn('Error fetching employees:', err);
+    }
+  };
+
+  // Load employees & matrices
   useEffect(() => {
     try {
       const savedMatrix = localStorage.getItem('ecomhub_role_matrix');
@@ -256,18 +390,59 @@ export const TeamMembersRolesView: React.FC = () => {
       if (savedUiVis) {
         setUiVisibilityMap(JSON.parse(savedUiVis));
       }
-      const savedEmps = localStorage.getItem('ecomhub_employees');
-      if (savedEmps) {
-        setEmployees(JSON.parse(savedEmps));
-      } else {
-        const initial: any[] = [];
-        setEmployees(initial);
-        localStorage.setItem('ecomhub_employees', JSON.stringify(initial));
+    } catch {}
+
+    const loadAuthoritativePermissions = async () => {
+      try {
+        const client = getSupabaseClient();
+        if (client) {
+          const { data: dbPerms } = await client.from('role_permissions').select('*');
+          if (dbPerms && Array.isArray(dbPerms) && dbPerms.length > 0) {
+            setRolePermissions((prev) => {
+              const next = { ...prev };
+              dbPerms.forEach((rp: any) => {
+                if (!next[rp.role_key]) next[rp.role_key] = {};
+                next[rp.role_key][`${rp.module_key}.view`] = rp.can_view;
+                next[rp.role_key][`${rp.module_key}.create`] = rp.can_create;
+                next[rp.role_key][`${rp.module_key}.edit`] = rp.can_edit;
+                next[rp.role_key][`${rp.module_key}.delete`] = rp.can_delete;
+                next[rp.role_key][`${rp.module_key}.export`] = rp.can_export;
+              });
+              return next;
+            });
+          }
+
+          const { data: dbUi } = await client.from('role_ui_access').select('*');
+          if (dbUi && Array.isArray(dbUi) && dbUi.length > 0) {
+            setUiVisibilityMap((prev) => {
+              const next = { ...prev };
+              dbUi.forEach((rua: any) => {
+                if (!next[rua.role_key]) next[rua.role_key] = {};
+                next[rua.role_key][rua.tab_key] = rua.visible;
+              });
+              return next;
+            });
+          }
+        } else {
+          const res = await fetch('/api/permissions/matrix');
+          if (res.ok) {
+            const data = await res.json();
+            if (data && Object.keys(data).length > 0) setRolePermissions((prev) => ({ ...prev, ...data }));
+          }
+          const uiRes = await fetch('/api/permissions/ui-access');
+          if (uiRes.ok) {
+            const uiData = await uiRes.json();
+            if (uiData && Object.keys(uiData).length > 0) setUiVisibilityMap((prev) => ({ ...prev, ...uiData }));
+          }
+        }
+      } catch (err) {
+        console.warn('Could not load permissions from DB, using cache:', err);
       }
-    } catch {
-      // ignore
-    }
-  }, []);
+    };
+
+    loadAuthoritativePermissions();
+    fetchEmployees();
+  }, [activeBusiness?.id]);
 
   const saveEmployeesToStorage = (updated: any[]) => {
     setEmployees(updated);
@@ -287,62 +462,300 @@ export const TeamMembersRolesView: React.FC = () => {
     return () => window.removeEventListener('ecomhub_employees_updated', handleSync);
   }, []);
 
-  const handleTogglePermission = (modId: string, action: string) => {
-    setIsMatrixDirty(true);
-    const key = `${modId}.${action}`;
-    setRolePermissions((prev) => {
-      const currentRolePerms = prev[selectedRoleKey] || {};
-      const updatedPerms = { ...currentRolePerms };
-      const newValue = !currentRolePerms[key];
-      updatedPerms[key] = newValue;
+  const handleTogglePermission = async (modId: string, action: string) => {
+    if (!canEditPermissions) {
+      setStatusMessage('Unauthorized: Only Owner or Admin can modify role permissions.');
+      setTimeout(() => setStatusMessage(null), 3000);
+      return;
+    }
 
-      // View dependency rule: if view is turned OFF, turn off all actions for this module
-      if (action === 'view' && !newValue) {
-        ACTIONS.forEach((act) => {
-          updatedPerms[`${modId}.${act}`] = false;
+    const key = `${modId}.${action}`;
+    const previousState = { ...rolePermissions };
+    const currentRolePerms = previousState[selectedRoleKey] || {};
+    const updatedPerms = { ...currentRolePerms };
+    const newValue = !currentRolePerms[key];
+    updatedPerms[key] = newValue;
+
+    // View dependency rule: if view is turned OFF, turn off all actions for this module
+    if (action === 'view' && !newValue) {
+      ACTIONS.forEach((act) => {
+        updatedPerms[`${modId}.${act}`] = false;
+      });
+    }
+
+    const nextState = {
+      ...previousState,
+      [selectedRoleKey]: updatedPerms,
+    };
+
+    // 1. Optimistic UI update
+    setRolePermissions(nextState);
+    setIsSavingMatrix(true);
+    setMatrixSaveStatus('Saving permission to database...');
+
+    try {
+      const client = getSupabaseClient();
+      let supabaseSuccess = false;
+
+      // Resolve canonical alias
+      const def = resolveRoleDefinition(selectedRoleKey);
+      const targetRoleKeys = Array.from(new Set([selectedRoleKey, def.canonicalKey, def.legacyKey]));
+
+      const canView = updatedPerms[`${modId}.view`] === true;
+      const permRows: any[] = [];
+      targetRoleKeys.forEach((rKey) => {
+        permRows.push({
+          role_key: rKey,
+          module_key: modId,
+          can_view: canView,
+          can_create: canView && updatedPerms[`${modId}.create`] === true,
+          can_edit: canView && updatedPerms[`${modId}.edit`] === true,
+          can_delete: canView && updatedPerms[`${modId}.delete`] === true,
+          can_export: canView && updatedPerms[`${modId}.export`] === true,
+          updated_at: new Date().toISOString(),
+          updated_by: user?.id || null,
         });
+      });
+
+      if (client) {
+        try {
+          const { error } = await client.from('role_permissions').upsert(permRows, { onConflict: 'role_key,module_key' });
+          if (!error) supabaseSuccess = true;
+          else console.warn('[Supabase Matrix Upsert Notice]:', error);
+        } catch (dbErr) {
+          console.warn('[Supabase Direct Write Notice]:', dbErr);
+        }
       }
 
-      const nextState = {
-        ...prev,
-        [selectedRoleKey]: updatedPerms,
-      };
-
-      try {
-        localStorage.setItem('ecomhub_role_matrix', JSON.stringify(nextState));
-        window.dispatchEvent(new Event('ecomhub_role_matrix_updated'));
-      } catch {}
-
-      return nextState;
-    });
-  };
-
-  const handleToggleUiVisibility = (modId: string) => {
-    setIsMatrixDirty(true);
-    setUiVisibilityMap((prev) => {
-      const currentRoleMap = prev[selectedRoleKey] || {};
-      const currentVal = currentRoleMap[modId] !== false; // defaults to true
-      const nextMap = {
-        ...prev,
-        [selectedRoleKey]: {
-          ...currentRoleMap,
-          [modId]: !currentVal,
+      const res = await fetch('/api/permissions/matrix', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer user:${user?.id || 'usr-ecometrix-001'}`,
+          'x-business-id': activeBusiness?.id || 'biz-ecometrix-001',
+          'x-user-id': user?.id || 'usr-ecometrix-001',
+          'x-user-role': activeBusiness?.role || 'Owner',
         },
-      };
-      try {
-        localStorage.setItem('ecomhub_ui_role_visibility', JSON.stringify(nextMap));
-        window.dispatchEvent(new Event('ecomhub_ui_role_visibility_updated'));
-      } catch {}
-      return nextMap;
-    });
+        body: JSON.stringify({ matrix: nextState, updated_by: user?.id }),
+      });
+
+      if (!supabaseSuccess && !res.ok) {
+        throw new Error('Database write rejected or failed.');
+      }
+
+      // Update local storage cache & effective permission state
+      localStorage.setItem('ecomhub_role_matrix', JSON.stringify(nextState));
+      window.dispatchEvent(new Event('ecomhub_role_matrix_updated'));
+
+      setIsMatrixDirty(false);
+      setMatrixSaveStatus(`✓ Saved & applied for ${currentRoleObj.label}!`);
+      setTimeout(() => setMatrixSaveStatus(null), 3000);
+    } catch (err: any) {
+      console.error('[Permissions Save Failed]:', err);
+      // Rollback to previous state
+      setRolePermissions(previousState);
+      setMatrixSaveStatus(`Error saving: ${err.message || 'Database write failed'}`);
+      setStatusMessage(`Error saving: ${err.message || 'Could not persist to database'}`);
+      setTimeout(() => {
+        setMatrixSaveStatus(null);
+        setStatusMessage(null);
+      }, 4000);
+    } finally {
+      setIsSavingMatrix(false);
+    }
   };
 
-  const handleSaveMatrix = () => {
+  const handleToggleUiVisibility = async (modId: string) => {
+    if (!canEditPermissions) {
+      setStatusMessage('Unauthorized: Only Owner or Admin can modify role UI access.');
+      setTimeout(() => setStatusMessage(null), 3000);
+      return;
+    }
+
+    const previousState = { ...uiVisibilityMap };
+    const currentRoleMap = previousState[selectedRoleKey] || {};
+    const currentVal = currentRoleMap[modId] !== false; // defaults to true
+    const nextVal = !currentVal;
+
+    const nextMap = {
+      ...previousState,
+      [selectedRoleKey]: {
+        ...currentRoleMap,
+        [modId]: nextVal,
+      },
+    };
+
+    // 1. Optimistic UI update
+    setUiVisibilityMap(nextMap);
+    setIsSavingMatrix(true);
+    setMatrixSaveStatus('Saving UI tab access to database...');
+
     try {
+      const client = getSupabaseClient();
+      let supabaseSuccess = false;
+
+      const def = resolveRoleDefinition(selectedRoleKey);
+      const targetRoleKeys = Array.from(new Set([selectedRoleKey, def.canonicalKey, def.legacyKey]));
+
+      const uiRows: any[] = [];
+      targetRoleKeys.forEach((rKey) => {
+        uiRows.push({
+          role_key: rKey,
+          tab_key: modId,
+          visible: nextVal,
+          updated_at: new Date().toISOString(),
+          updated_by: user?.id || null,
+        });
+      });
+
+      if (client) {
+        try {
+          const { error } = await client.from('role_ui_access').upsert(uiRows, { onConflict: 'role_key,tab_key' });
+          if (!error) supabaseSuccess = true;
+          else console.warn('[Supabase UI Upsert Notice]:', error);
+        } catch (dbErr) {
+          console.warn('[Supabase Direct Write Notice]:', dbErr);
+        }
+      }
+
+      const res = await fetch('/api/permissions/ui-access', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer user:${user?.id || 'usr-ecometrix-001'}`,
+          'x-business-id': activeBusiness?.id || 'biz-ecometrix-001',
+          'x-user-id': user?.id || 'usr-ecometrix-001',
+          'x-user-role': activeBusiness?.role || 'Owner',
+        },
+        body: JSON.stringify({ ui_map: nextMap, updated_by: user?.id }),
+      });
+
+      if (!supabaseSuccess && !res.ok) {
+        throw new Error('Database write rejected or failed.');
+      }
+
+      // Update local storage cache & effective permission state
+      localStorage.setItem('ecomhub_ui_role_visibility', JSON.stringify(nextMap));
+      window.dispatchEvent(new Event('ecomhub_ui_role_visibility_updated'));
+
+      setIsMatrixDirty(false);
+      setMatrixSaveStatus(`✓ Saved & applied for ${currentRoleObj.label}!`);
+      setTimeout(() => setMatrixSaveStatus(null), 3000);
+    } catch (err: any) {
+      console.error('[UI Access Save Failed]:', err);
+      // Rollback to previous state
+      setUiVisibilityMap(previousState);
+      setMatrixSaveStatus(`Error saving: ${err.message || 'Database write failed'}`);
+      setStatusMessage(`Error saving: ${err.message || 'Could not persist to database'}`);
+      setTimeout(() => {
+        setMatrixSaveStatus(null);
+        setStatusMessage(null);
+      }, 4000);
+    } finally {
+      setIsSavingMatrix(false);
+    }
+  };
+
+  const [isSavingMatrix, setIsSavingMatrix] = useState(false);
+
+  const handleSaveMatrix = async () => {
+    if (!canEditPermissions) {
+      setStatusMessage('Unauthorized: Only Owner or Admin can modify role permissions.');
+      setTimeout(() => setStatusMessage(null), 3000);
+      return;
+    }
+
+    setIsSavingMatrix(true);
+    setMatrixSaveStatus('Saving configuration to database...');
+    try {
+      const client = getSupabaseClient();
+      let supabaseSuccess = false;
+
+      const def = resolveRoleDefinition(selectedRoleKey);
+      const targetRoleKeys = Array.from(new Set([selectedRoleKey, def.canonicalKey, def.legacyKey]));
+
+      // 1. Direct Supabase write
+      if (client) {
+        try {
+          const currentRolePerms = rolePermissions[selectedRoleKey] || {};
+          const permRows: any[] = [];
+          targetRoleKeys.forEach((rKey) => {
+            MODULE_LIST.forEach((mod) => {
+              const canView = currentRolePerms[`${mod.id}.view`] === true;
+              permRows.push({
+                role_key: rKey,
+                module_key: mod.id,
+                can_view: canView,
+                can_create: canView && currentRolePerms[`${mod.id}.create`] === true,
+                can_edit: canView && currentRolePerms[`${mod.id}.edit`] === true,
+                can_delete: canView && currentRolePerms[`${mod.id}.delete`] === true,
+                can_export: canView && currentRolePerms[`${mod.id}.export`] === true,
+                updated_at: new Date().toISOString(),
+                updated_by: user?.id || null,
+              });
+            });
+          });
+          const { error: permErr } = await client.from('role_permissions').upsert(permRows, { onConflict: 'role_key,module_key' });
+
+          const currentRoleUi = uiVisibilityMap[selectedRoleKey] || {};
+          const uiRows: any[] = [];
+          targetRoleKeys.forEach((rKey) => {
+            SIDEBAR_UI_MODULES.forEach((mod) => {
+              uiRows.push({
+                role_key: rKey,
+                tab_key: mod.id,
+                visible: currentRoleUi[mod.id] !== false,
+                updated_at: new Date().toISOString(),
+                updated_by: user?.id || null,
+              });
+            });
+          });
+          const { error: uiErr } = await client.from('role_ui_access').upsert(uiRows, { onConflict: 'role_key,tab_key' });
+          if (!permErr && !uiErr) {
+            supabaseSuccess = true;
+          }
+        } catch (dbErr) {
+          console.warn('[Direct Supabase Matrix Write Notice]:', dbErr);
+        }
+      }
+
+      // 2. Server API write
+      const res = await fetch('/api/permissions/matrix', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer user:${user?.id || 'usr-ecometrix-001'}`,
+          'x-business-id': activeBusiness?.id || 'biz-ecometrix-001',
+          'x-user-id': user?.id || 'usr-ecometrix-001',
+          'x-user-role': activeBusiness?.role || 'Owner',
+        },
+        body: JSON.stringify({ matrix: rolePermissions, updated_by: user?.id }),
+      });
+
+      const uiRes = await fetch('/api/permissions/ui-access', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer user:${user?.id || 'usr-ecometrix-001'}`,
+          'x-business-id': activeBusiness?.id || 'biz-ecometrix-001',
+          'x-user-id': user?.id || 'usr-ecometrix-001',
+          'x-user-role': activeBusiness?.role || 'Owner',
+        },
+        body: JSON.stringify({ ui_map: uiVisibilityMap, updated_by: user?.id }),
+      });
+
+      if (!res.ok && !uiRes.ok && !supabaseSuccess) {
+        throw new Error('Failed to save permissions to database.');
+      }
+
+      // Update local storage cache
       localStorage.setItem('ecomhub_role_matrix', JSON.stringify(rolePermissions));
       localStorage.setItem('ecomhub_ui_role_visibility', JSON.stringify(uiVisibilityMap));
+
+      // Trigger live updates
       window.dispatchEvent(new Event('ecomhub_ui_role_visibility_updated'));
       window.dispatchEvent(new Event('ecomhub_role_matrix_updated'));
+
       setIsMatrixDirty(false);
       setMatrixSaveStatus(`Saved & applied for ${currentRoleObj.label}!`);
       setStatusMessage(`Permissions & UI View configuration saved successfully for ${currentRoleObj.label}!`);
@@ -350,24 +763,144 @@ export const TeamMembersRolesView: React.FC = () => {
         setMatrixSaveStatus(null);
         setStatusMessage(null);
       }, 3500);
-    } catch {
-      setMatrixSaveStatus('Error saving configuration.');
-      setStatusMessage('Error saving configuration.');
+    } catch (err: any) {
+      setMatrixSaveStatus(`Error saving: ${err.message || 'Database write failed'}`);
+      setStatusMessage(`Error saving: ${err.message || 'Could not persist to database'}`);
+    } finally {
+      setIsSavingMatrix(false);
     }
   };
 
-  const handleAddEmployeeSubmit = (e: React.FormEvent) => {
+  const handleAddEmployeeSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!addForm.name || !addForm.email) return;
+    setAddFormError(null);
+    if (!addForm.name.trim() || !addForm.email.trim() || !addForm.password.trim()) {
+      setAddFormError('Please fill in Name, Email, and Temporary Password.');
+      return;
+    }
 
-    const assignedRoles = addForm.roles.includes(addForm.role) ? addForm.roles : [addForm.role, ...addForm.roles];
-    const empPassword = addForm.password.trim() || 'Admin1234!';
     const cleanEmail = addForm.email.trim().toLowerCase();
+    if (!cleanEmail.includes('@') || !cleanEmail.includes('.')) {
+      setAddFormError('Please enter a valid email address.');
+      return;
+    }
 
+    if (employees.some((emp) => emp.email?.toLowerCase() === cleanEmail)) {
+      setAddFormError(`An employee with email "${cleanEmail}" is already registered.`);
+      return;
+    }
+
+    setIsSubmittingAdd(true);
+
+    const assignedRoles = addForm.roles.includes(addForm.role)
+      ? addForm.roles
+      : [addForm.role, ...addForm.roles];
+    const empPassword = addForm.password.trim() || 'Admin1234!';
+    let authUserId = typeof crypto !== 'undefined' && crypto.randomUUID
+      ? crypto.randomUUID()
+      : `usr-emp-${Date.now()}`;
+
+    // 1. Supabase Auth registration with standalone client (preserves Owner session)
+    try {
+      const cfgRes = await fetch('/api/auth/config');
+      if (cfgRes.ok) {
+        const cfg = await cfgRes.json();
+        if (cfg.supabaseUrl && cfg.supabaseAnonKey) {
+          const standaloneClient = createClient(cfg.supabaseUrl, cfg.supabaseAnonKey, {
+            auth: { persistSession: false, autoRefreshToken: false }
+          });
+          const { data: signUpData } = await standaloneClient.auth.signUp({
+            email: cleanEmail,
+            password: empPassword,
+            options: {
+              data: {
+                full_name: addForm.name.trim(),
+                role: addForm.role,
+                roles: assignedRoles,
+                department: addForm.department.trim(),
+                job_title: addForm.jobTitle.trim(),
+                business_id: activeBusiness?.id || 'biz-ecometrix-001',
+              }
+            }
+          });
+          if (signUpData?.user?.id) {
+            authUserId = signUpData.user.id;
+          }
+        }
+      }
+    } catch (signUpErr) {
+      console.warn('[Supabase SignUp Notice]:', signUpErr);
+    }
+
+    // 2. Persist to Supabase public.profiles & public.business_members
+    try {
+      const client = getSupabaseClient();
+      if (client) {
+        await client.from('profiles').upsert({
+          id: authUserId,
+          email: cleanEmail,
+          full_name: addForm.name.trim(),
+          updated_at: new Date().toISOString()
+        }, { onConflict: 'id' });
+
+        const validDbRole = ['Owner', 'Admin', 'Manager', 'Finance', 'Sales', 'Viewer'].includes(addForm.role)
+          ? addForm.role
+          : 'Employee';
+
+        await client.from('business_members').upsert({
+          user_id: authUserId,
+          business_id: activeBusiness?.id || 'biz-ecometrix-001',
+          role: validDbRole
+        }, { onConflict: 'user_id,business_id' });
+
+        // Insert one role-assignment row per selected role in canonical business_member_roles table
+        for (const rKey of assignedRoles) {
+          try {
+            await client.from('business_member_roles').insert({
+              user_id: authUserId,
+              business_id: activeBusiness?.id || 'biz-ecometrix-001',
+              role_key: rKey,
+              created_by: user?.id || 'usr-ecometrix-001',
+            });
+          } catch {}
+        }
+      }
+    } catch (dbErr) {
+      console.warn('[Supabase DB Upsert Notice]:', dbErr);
+    }
+
+    // 3. Server API Call
+    try {
+      await fetch('/api/employees', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer user:${user?.id || 'usr-ecometrix-001'}`,
+          'x-business-id': activeBusiness?.id || 'biz-ecometrix-001',
+          'x-user-id': user?.id || 'usr-ecometrix-001',
+          'x-user-role': activeBusiness?.role || 'Owner',
+        },
+        body: JSON.stringify({
+          user_id: authUserId,
+          name: addForm.name.trim(),
+          email: cleanEmail,
+          password: empPassword,
+          temp_password: empPassword,
+          role: addForm.role,
+          roles: assignedRoles,
+          job_title: addForm.jobTitle.trim() || 'Team Member',
+          department: addForm.department.trim() || 'General',
+          phone: addForm.phone.trim(),
+          status: 'Active',
+        })
+      });
+    } catch {}
+
+    // 4. Construct local employee record
     const newEmp = {
       id: `emp-${Date.now()}`,
       business_id: activeBusiness?.id || 'biz-ecometrix-001',
-      user_id: `usr-emp-${Date.now()}`,
+      user_id: authUserId,
       name: addForm.name.trim(),
       email: cleanEmail,
       password: empPassword,
@@ -377,7 +910,7 @@ export const TeamMembersRolesView: React.FC = () => {
       jobTitle: addForm.jobTitle.trim() || 'Team Member',
       department: addForm.department.trim() || 'General',
       phone: addForm.phone.trim(),
-      status: 'Added',
+      status: 'Active',
       lastLogin: 'Never',
       performedTasksCount: 0,
       created_at: new Date().toISOString()
@@ -386,10 +919,11 @@ export const TeamMembersRolesView: React.FC = () => {
     const updated = [newEmp, ...employees];
     saveEmployeesToStorage(updated);
 
+    // 5. Update local member caches
     try {
       const rawMem = localStorage.getItem('ecomhub_members');
       const allMem = rawMem ? JSON.parse(rawMem) : [];
-      const newMem = {
+      allMem.push({
         id: `mem-${newEmp.id}`,
         user_id: newEmp.user_id,
         business_id: newEmp.business_id,
@@ -402,11 +936,9 @@ export const TeamMembersRolesView: React.FC = () => {
           email: newEmp.email,
           full_name: newEmp.name,
         }
-      };
-      allMem.push(newMem);
+      });
       localStorage.setItem('ecomhub_members', JSON.stringify(allMem));
 
-      // Also register into ecomhub_registered_users for universal login support
       const rawReg = localStorage.getItem('ecomhub_registered_users');
       const regUsers = rawReg ? JSON.parse(rawReg) : [];
       const regIdx = regUsers.findIndex((u: any) => u.email?.toLowerCase() === cleanEmail);
@@ -416,7 +948,8 @@ export const TeamMembersRolesView: React.FC = () => {
         password: newEmp.password,
         full_name: newEmp.name,
         role: newEmp.role,
-        business_name: 'Ecometrix Hub',
+        roles: newEmp.roles,
+        business_name: activeBusiness?.name || 'Ecometrix Hub',
         created_at: newEmp.created_at,
       };
       if (regIdx >= 0) regUsers[regIdx] = regEntry;
@@ -435,9 +968,7 @@ export const TeamMembersRolesView: React.FC = () => {
 
     try {
       inviteMember(cleanEmail, newEmp.name, addForm.role);
-    } catch {
-      // ignore
-    }
+    } catch {}
 
     const currentOrigin = typeof window !== 'undefined' ? window.location.origin : '';
     const defaultBase = currentOrigin.includes('localhost') || currentOrigin.includes('run.app')
@@ -447,17 +978,19 @@ export const TeamMembersRolesView: React.FC = () => {
     setLastCreatedEmployee(newEmp);
 
     setIsAddModalOpen(false);
+    setIsSubmittingAdd(false);
     setAddForm({
       name: '',
       email: '',
       password: 'Admin1234!',
-      role: 'Admin',
-      roles: ['Admin'],
-      jobTitle: 'System Administrator',
-      department: 'Executive / IT',
-      phone: ''
+      role: 'Sales',
+      roles: ['Sales'],
+      jobTitle: 'Sales Representative',
+      department: 'Sales & Growth',
+      phone: '',
+      showAddRoles: false,
     });
-    setStatusMessage(`Employee ${newEmp.name} registered successfully! Credentials popup ready.`);
+    setStatusMessage(`Employee ${newEmp.name} registered successfully with temporary password!`);
     setTimeout(() => setStatusMessage(null), 4000);
   };
 
@@ -486,19 +1019,100 @@ export const TeamMembersRolesView: React.FC = () => {
     });
   };
 
-  const handleEditEmployeeSubmit = (e: React.FormEvent) => {
+  const handleEditEmployeeSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingEmployee) return;
 
     const assignedRoles = editForm.roles.includes(editForm.role) ? editForm.roles : [editForm.role, ...editForm.roles];
     const newPass = editForm.password.trim() || editingEmployee.password || 'Admin1234!';
+    const cleanEmail = editForm.email.trim().toLowerCase();
+
+    // 1. Update Supabase
+    try {
+      const client = getSupabaseClient();
+      if (client) {
+        if (editingEmployee.user_id) {
+          await client.from('profiles').update({
+            full_name: editForm.name.trim(),
+            updated_at: new Date().toISOString()
+          }).eq('id', editingEmployee.user_id);
+
+          const validDbRole = ['Owner', 'Admin', 'Manager', 'Finance', 'Sales', 'Viewer'].includes(editForm.role)
+            ? editForm.role
+            : 'Employee';
+          await client.from('business_members').update({
+            role: validDbRole
+          }).eq('user_id', editingEmployee.user_id).eq('business_id', activeBusiness?.id || 'biz-ecometrix-001');
+
+          // Reconcile multi-role assignments in business_member_roles:
+          // Insert only missing role assignments, delete only removed role assignments
+          try {
+            const { data: currentBmr } = await client
+              .from('business_member_roles')
+              .select('id, role_key')
+              .eq('user_id', editingEmployee.user_id)
+              .eq('business_id', activeBusiness?.id || 'biz-ecometrix-001');
+
+            const curList = currentBmr || [];
+            const curKeysLower = curList.map((r: any) => (r.role_key || '').toLowerCase());
+            const targetLower = assignedRoles.map((r: string) => r.toLowerCase());
+
+            // Delete only removed roles
+            for (const c of curList) {
+              if (!targetLower.includes((c.role_key || '').toLowerCase())) {
+                await client.from('business_member_roles').delete().eq('id', c.id);
+              }
+            }
+
+            // Insert only missing roles
+            for (const rKey of assignedRoles) {
+              if (!curKeysLower.includes(rKey.toLowerCase())) {
+                await client.from('business_member_roles').insert({
+                  user_id: editingEmployee.user_id,
+                  business_id: activeBusiness?.id || 'biz-ecometrix-001',
+                  role_key: rKey,
+                  created_by: user?.id || 'usr-ecometrix-001',
+                });
+              }
+            }
+          } catch (rErr) {
+            console.warn('[Direct Supabase Roles Reconcile Notice]:', rErr);
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('[Supabase Edit Employee Notice]:', err);
+    }
+
+    // 2. Call Server API
+    try {
+      await fetch(`/api/employees/${editingEmployee.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer user:${user?.id || 'usr-ecometrix-001'}`,
+          'x-business-id': activeBusiness?.id || 'biz-ecometrix-001',
+          'x-user-id': user?.id || 'usr-ecometrix-001',
+          'x-user-role': activeBusiness?.role || 'Owner',
+        },
+        body: JSON.stringify({
+          name: editForm.name.trim(),
+          email: cleanEmail,
+          role: editForm.role,
+          roles: assignedRoles,
+          job_title: editForm.jobTitle.trim(),
+          phone: editForm.phone.trim(),
+          status: editForm.status,
+        })
+      });
+    } catch {}
 
     const updated = employees.map((emp) => {
       if (emp.id === editingEmployee.id) {
         return {
           ...emp,
-          name: editForm.name,
-          email: editForm.email.trim().toLowerCase(),
+          name: editForm.name.trim(),
+          email: cleanEmail,
           password: newPass,
           temp_password: newPass,
           role: editForm.role,
@@ -528,7 +1142,7 @@ export const TeamMembersRolesView: React.FC = () => {
               profile: {
                 ...m.profile,
                 full_name: editForm.name,
-                email: editForm.email.trim().toLowerCase()
+                email: cleanEmail
               }
             };
           }
@@ -544,10 +1158,11 @@ export const TeamMembersRolesView: React.FC = () => {
           if (u.email?.toLowerCase() === editingEmployee.email?.toLowerCase()) {
             return {
               ...u,
-              email: editForm.email.trim().toLowerCase(),
+              email: cleanEmail,
               full_name: editForm.name,
               password: newPass,
               role: editForm.role,
+              roles: assignedRoles,
             };
           }
           return u;
@@ -561,9 +1176,34 @@ export const TeamMembersRolesView: React.FC = () => {
     setTimeout(() => setStatusMessage(null), 3000);
   };
 
-  const handleDeleteEmployee = (id: string, email?: string) => {
+  const handleDeleteEmployee = async (id: string, email?: string) => {
+    const empToDelete = employees.find(e => e.id === id || e.email === email);
     const updated = employees.filter((e) => e.id !== id && e.email !== email);
     saveEmployeesToStorage(updated);
+
+    // 1. Delete from Supabase
+    try {
+      const client = getSupabaseClient();
+      if (client && empToDelete?.user_id) {
+        await client.from('business_member_roles').delete().eq('user_id', empToDelete.user_id).eq('business_id', activeBusiness?.id || 'biz-ecometrix-001');
+        await client.from('business_members').delete().eq('user_id', empToDelete.user_id).eq('business_id', activeBusiness?.id || 'biz-ecometrix-001');
+      }
+    } catch (err) {
+      console.warn('[Supabase Delete Employee Notice]:', err);
+    }
+
+    // 2. Call Server API
+    try {
+      await fetch(`/api/employees/${id}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer user:${user?.id || 'usr-ecometrix-001'}`,
+          'x-business-id': activeBusiness?.id || 'biz-ecometrix-001',
+          'x-user-id': user?.id || 'usr-ecometrix-001',
+          'x-user-role': activeBusiness?.role || 'Owner',
+        }
+      });
+    } catch {}
 
     try {
       const rawMem = localStorage.getItem('ecomhub_members');
@@ -572,9 +1212,7 @@ export const TeamMembersRolesView: React.FC = () => {
         const updatedMem = members.filter((m: any) => m.id !== id && m.user_id !== id && m.profile?.email !== email);
         localStorage.setItem('ecomhub_members', JSON.stringify(updatedMem));
       }
-    } catch {
-      // ignore
-    }
+    } catch {}
 
     setStatusMessage('Employee removed successfully.');
     setTimeout(() => setStatusMessage(null), 3000);
@@ -609,6 +1247,18 @@ export const TeamMembersRolesView: React.FC = () => {
 
   const currentRoleObj = SYSTEM_ROLES.find((r) => r.key === selectedRoleKey) || SYSTEM_ROLES[2];
 
+  if (!canViewTeam) {
+    return (
+      <UnauthorizedView
+        attemptedPath="/team-members-roles"
+        onBackToDashboard={() => {
+          window.history.pushState({}, '', '/');
+          window.dispatchEvent(new PopStateEvent('popstate'));
+        }}
+      />
+    );
+  }
+
   return (
     <div className="max-w-7xl mx-auto p-6 space-y-6">
       {/* Top Header */}
@@ -638,13 +1288,15 @@ export const TeamMembersRolesView: React.FC = () => {
               <span>{statusMessage}</span>
             </div>
           )}
-          <button
-            onClick={() => setIsAddModalOpen(true)}
-            className="inline-flex items-center gap-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold rounded-xl shadow-md shadow-indigo-600/30 transition-all cursor-pointer"
-          >
-            <UserPlus className="w-4 h-4" />
-            <span>Add Employee</span>
-          </button>
+          {canManageTeam && (
+            <button
+              onClick={() => setIsAddModalOpen(true)}
+              className="inline-flex items-center gap-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold rounded-xl shadow-md shadow-indigo-600/30 transition-all cursor-pointer"
+            >
+              <UserPlus className="w-4 h-4" />
+              <span>Add Employee</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -700,7 +1352,14 @@ export const TeamMembersRolesView: React.FC = () => {
             <div className="flex flex-wrap gap-2 pb-4 border-b border-slate-800">
               {SYSTEM_ROLES.map((r) => {
                 const isSelected = selectedRoleKey === r.key;
-                const count = employees.filter((e) => (e.roles || [e.role]).includes(r.key)).length;
+                const count = employees.filter((e) => {
+                  const roleList = (e.roles && e.roles.length > 0 ? e.roles : [e.role]).map((x: string) => (x || '').toLowerCase().trim());
+                  return (
+                    roleList.includes(r.key.toLowerCase()) ||
+                    roleList.includes(r.label.toLowerCase()) ||
+                    roleList.includes(r.role.toLowerCase())
+                  );
+                }).length;
                 return (
                   <button
                     key={r.key}
@@ -758,18 +1417,20 @@ export const TeamMembersRolesView: React.FC = () => {
                     <span>{matrixSaveStatus}</span>
                   </span>
                 )}
-                <button
-                  type="button"
-                  onClick={handleSaveMatrix}
-                  className={`inline-flex items-center gap-2 px-4 py-2 text-xs font-semibold rounded-xl transition-all cursor-pointer ${
-                    isMatrixDirty
-                      ? 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-md shadow-indigo-600/30 ring-2 ring-indigo-400/40'
-                      : 'bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/40 shadow-xs'
-                  }`}
-                >
-                  <Save className="w-3.5 h-3.5" />
-                  <span>{isMatrixDirty ? 'Save Changes' : '✓ Saved & Applied'}</span>
-                </button>
+                {canEditPermissions && (
+                  <button
+                    type="button"
+                    onClick={handleSaveMatrix}
+                    className={`inline-flex items-center gap-2 px-4 py-2 text-xs font-semibold rounded-xl transition-all cursor-pointer ${
+                      isMatrixDirty
+                        ? 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-md shadow-indigo-600/30 ring-2 ring-indigo-400/40'
+                        : 'bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/40 shadow-xs'
+                    }`}
+                  >
+                    <Save className="w-3.5 h-3.5" />
+                    <span>{isMatrixDirty ? 'Save Changes' : '✓ Saved & Applied'}</span>
+                  </button>
+                )}
               </div>
             </div>
 
@@ -809,15 +1470,18 @@ export const TeamMembersRolesView: React.FC = () => {
                             {ACTIONS.map((action) => {
                               const permKey = `${mod.id}.${action}`;
                               const isActive = !!currentPerms[permKey];
-                              const isActionDisabled = action !== 'view' && !isViewActive;
+                              const isActionDisabled = (action !== 'view' && !isViewActive) || !canEditPermissions;
 
                               return (
                                 <td key={action} className="py-3.5 px-3 text-center">
-                                  <label className={`relative inline-flex items-center justify-center ${isActionDisabled ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'}`}>
+                                  <label
+                                    title={!canEditPermissions ? 'Read-only: requires team_roles.edit permission' : undefined}
+                                    className={`relative inline-flex items-center justify-center ${isActionDisabled ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'}`}
+                                  >
                                     <input
                                       type="checkbox"
                                       disabled={isActionDisabled}
-                                      checked={isActionDisabled ? false : isActive}
+                                      checked={isActionDisabled && !canEditPermissions ? isActive : isActionDisabled ? false : isActive}
                                       onChange={() => handleTogglePermission(mod.id, action)}
                                       className="sr-only peer"
                                     />
@@ -854,8 +1518,13 @@ export const TeamMembersRolesView: React.FC = () => {
                     return (
                       <div
                         key={uiMod.id}
-                        onClick={() => handleToggleUiVisibility(uiMod.id)}
-                        className={`flex items-center justify-between p-3.5 rounded-xl border cursor-pointer transition-all ${
+                        title={!canEditPermissions ? 'Read-only: requires team_roles.edit permission' : undefined}
+                        onClick={() => {
+                          if (canEditPermissions) handleToggleUiVisibility(uiMod.id);
+                        }}
+                        className={`flex items-center justify-between p-3.5 rounded-xl border transition-all ${
+                          !canEditPermissions ? 'cursor-not-allowed opacity-70' : 'cursor-pointer'
+                        } ${
                           isVisible
                             ? 'bg-indigo-600/15 border-indigo-500/40 text-white'
                             : 'bg-slate-900 border-slate-800 text-slate-400 hover:border-slate-700'
@@ -1005,14 +1674,16 @@ export const TeamMembersRolesView: React.FC = () => {
                               <Key className="w-3.5 h-3.5 text-indigo-400" />
                               <span>Login Info</span>
                             </button>
-                            <button
-                              onClick={() => handleOpenEdit(emp)}
-                              className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium rounded-lg transition-colors flex items-center gap-1"
-                            >
-                              <Edit className="w-3.5 h-3.5" />
-                              <span>Edit</span>
-                            </button>
-                            {emp.role !== 'Owner' && (
+                            {canManageTeam && (
+                              <button
+                                onClick={() => handleOpenEdit(emp)}
+                                className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium rounded-lg transition-colors flex items-center gap-1"
+                              >
+                                <Edit className="w-3.5 h-3.5" />
+                                <span>Edit</span>
+                              </button>
+                            )}
+                            {canManageTeam && emp.role !== 'Owner' && (
                               <button
                                 onClick={() => handleDeleteEmployee(emp.id, emp.email)}
                                 className="p-1.5 text-slate-400 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
@@ -1036,7 +1707,7 @@ export const TeamMembersRolesView: React.FC = () => {
       {/* ADD EMPLOYEE MODAL */}
       {isAddModalOpen && (
         <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-[#141B2D] border border-slate-800 rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-6">
+          <div className="bg-[#141B2D] border border-slate-800 rounded-2xl max-w-xl w-full p-6 shadow-2xl space-y-5 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between border-b border-slate-800 pb-4">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-xl bg-indigo-500/10 text-indigo-400 flex items-center justify-center border border-indigo-500/20">
@@ -1044,16 +1715,26 @@ export const TeamMembersRolesView: React.FC = () => {
                 </div>
                 <div>
                   <h3 className="text-base font-bold text-white">Add New Team Employee</h3>
-                  <p className="text-xs text-slate-400">Instantly register employee and assign system role</p>
+                  <p className="text-xs text-slate-400">Instantly create account, temporary password & assign multi-roles</p>
                 </div>
               </div>
               <button
-                onClick={() => setIsAddModalOpen(false)}
+                onClick={() => {
+                  setIsAddModalOpen(false);
+                  setAddFormError(null);
+                }}
                 className="text-slate-400 hover:text-white p-1 rounded-lg"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
+
+            {addFormError && (
+              <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-xl text-red-300 text-xs flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />
+                <span>{addFormError}</span>
+              </div>
+            )}
 
             <form onSubmit={handleAddEmployeeSubmit} className="space-y-4">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -1081,21 +1762,62 @@ export const TeamMembersRolesView: React.FC = () => {
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1.5">Initial Password</label>
+              {/* Temporary Password with Generator & Eye Toggle */}
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
+                    <Lock className="w-3.5 h-3.5 text-indigo-400" />
+                    <span>Temporary Password *</span>
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789!@#$%';
+                      let randPass = 'Emp';
+                      for (let i = 0; i < 6; i++) {
+                        randPass += chars.charAt(Math.floor(Math.random() * chars.length));
+                      }
+                      randPass += '!1';
+                      setAddForm({ ...addForm, password: randPass });
+                    }}
+                    className="text-[11px] text-indigo-400 hover:text-indigo-300 flex items-center gap-1 font-medium transition-colors"
+                  >
+                    <RefreshCw className="w-3 h-3" />
+                    <span>Generate Random</span>
+                  </button>
+                </div>
+                <div className="relative">
                   <input
-                    type="text"
+                    type={showAddPassword ? 'text' : 'password'}
+                    required
                     value={addForm.password}
                     onChange={(e) => setAddForm({ ...addForm, password: e.target.value })}
-                    className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-lg text-xs text-white placeholder-slate-500 focus:outline-hidden focus:border-indigo-500"
+                    className="w-full pl-3 pr-10 py-2 bg-slate-900 border border-slate-800 rounded-lg text-xs font-mono text-indigo-300 focus:outline-hidden focus:border-indigo-500"
                   />
+                  <button
+                    type="button"
+                    onClick={() => setShowAddPassword(!showAddPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition-colors"
+                  >
+                    {showAddPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                  </button>
                 </div>
+                <p className="text-[11px] text-slate-500 mt-1">
+                  Employee logs in directly with this temporary password. Email verification OTP is disabled.
+                </p>
+              </div>
+
+              {/* Primary Role & Multi-Role Selection */}
+              <div className="space-y-3 pt-1">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1.5">System Role Assignment *</label>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1.5">Primary System Role *</label>
                   <select
                     value={addForm.role}
-                    onChange={(e: any) => setAddForm({ ...addForm, role: e.target.value, roles: [e.target.value] })}
+                    onChange={(e: any) => {
+                      const newRole = e.target.value;
+                      const nextRoles = addForm.roles.includes(newRole) ? addForm.roles : [newRole, ...addForm.roles];
+                      setAddForm({ ...addForm, role: newRole, roles: nextRoles });
+                    }}
                     className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-lg text-xs text-white focus:outline-hidden focus:border-indigo-500"
                   >
                     {SYSTEM_ROLES.map((r) => (
@@ -1105,9 +1827,92 @@ export const TeamMembersRolesView: React.FC = () => {
                     ))}
                   </select>
                 </div>
+
+                {/* Multi-role management */}
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="text-xs font-semibold text-slate-300">
+                      Assigned Roles ({addForm.roles.length})
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => setAddForm(prev => ({ ...prev, showAddRoles: !prev.showAddRoles }))}
+                      className="px-2 py-0.5 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-300 text-[11px] font-semibold rounded-md border border-indigo-500/30 transition-colors flex items-center gap-1"
+                    >
+                      <span>{addForm.showAddRoles ? 'Hide Role Selector' : '+ Assign Multiple Roles'}</span>
+                    </button>
+                  </div>
+
+                  {/* Badges of selected roles */}
+                  <div className="flex flex-wrap gap-1.5 p-2.5 bg-slate-900 border border-slate-800 rounded-lg">
+                    {addForm.roles.map((rKey) => {
+                      const rObj = SYSTEM_ROLES.find(r => r.key === rKey);
+                      return (
+                        <span key={rKey} className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-indigo-600/20 text-indigo-300 border border-indigo-500/30 text-xs font-semibold rounded-md">
+                          <Shield className="w-3 h-3 text-indigo-400" />
+                          <span>{rObj?.label || rKey}</span>
+                          {addForm.roles.length > 1 && rKey !== addForm.role && (
+                            <button
+                              type="button"
+                              onClick={() => setAddForm(prev => ({ ...prev, roles: prev.roles.filter(x => x !== rKey) }))}
+                              className="text-slate-400 hover:text-red-400 ml-1"
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
+                          )}
+                        </span>
+                      );
+                    })}
+                  </div>
+
+                  {/* Toggable list for assigning multiple roles */}
+                  {addForm.showAddRoles && (
+                    <div className="p-3 bg-slate-900/90 border border-indigo-500/30 rounded-xl space-y-2.5 mt-2">
+                      <div className="text-xs font-bold text-white flex items-center justify-between">
+                        <span>Select additional custom roles to assign:</span>
+                        <span className="text-[10px] text-slate-400">Toggle ON / OFF</span>
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        {SYSTEM_ROLES.map((r) => {
+                          const isActive = addForm.roles.includes(r.key);
+                          return (
+                            <div
+                              key={r.key}
+                              onClick={() => {
+                                if (isActive) {
+                                  if (addForm.roles.length > 1 && r.key !== addForm.role) {
+                                    setAddForm(prev => ({ ...prev, roles: prev.roles.filter(x => x !== r.key) }));
+                                  }
+                                } else {
+                                  setAddForm(prev => ({ ...prev, roles: [...prev.roles, r.key] }));
+                                }
+                              }}
+                              className={`flex items-center justify-between p-2.5 rounded-xl border cursor-pointer transition-all ${
+                                isActive
+                                  ? 'bg-indigo-600/20 border-indigo-500/50 text-white'
+                                  : 'bg-slate-900 border-slate-800 text-slate-400 hover:border-slate-700'
+                              }`}
+                            >
+                              <div className="flex items-center gap-2">
+                                <Shield className={`w-3.5 h-3.5 ${isActive ? 'text-indigo-400' : 'text-slate-500'}`} />
+                                <span className="text-xs font-medium">{r.label}</span>
+                              </div>
+                              <div className={`w-8 h-4.5 rounded-full transition-colors relative flex items-center px-0.5 ${isActive ? 'bg-indigo-600' : 'bg-slate-700'}`}>
+                                <div className={`w-3.5 h-3.5 rounded-full bg-white transition-transform ${isActive ? 'translate-x-3.5' : 'translate-x-0'}`} />
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                      <p className="text-[11px] text-slate-400">
+                        Enabling multiple roles unlocks all tabs and permissions associated with each assigned role in the left navigation panel.
+                      </p>
+                    </div>
+                  )}
+                </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
                 <div>
                   <label className="block text-xs font-semibold text-slate-300 mb-1.5">Job Title</label>
                   <input
@@ -1133,17 +1938,30 @@ export const TeamMembersRolesView: React.FC = () => {
               <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-800">
                 <button
                   type="button"
-                  onClick={() => setIsAddModalOpen(false)}
+                  onClick={() => {
+                    setIsAddModalOpen(false);
+                    setAddFormError(null);
+                  }}
                   className="px-4 py-2 border border-slate-800 text-xs font-medium text-slate-300 rounded-xl hover:bg-slate-800 transition-colors"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold rounded-xl shadow-md shadow-indigo-600/30 transition-all flex items-center gap-2"
+                  disabled={isSubmittingAdd}
+                  className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold rounded-xl shadow-md shadow-indigo-600/30 transition-all flex items-center gap-2 cursor-pointer disabled:opacity-50"
                 >
-                  <UserPlus className="w-4 h-4" />
-                  <span>Add Employee</span>
+                  {isSubmittingAdd ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>Creating Account...</span>
+                    </>
+                  ) : (
+                    <>
+                      <UserPlus className="w-4 h-4" />
+                      <span>Add Employee</span>
+                    </>
+                  )}
                 </button>
               </div>
             </form>

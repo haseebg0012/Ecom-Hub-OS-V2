@@ -417,6 +417,21 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             },
           ]);
 
+          // Add assignment notification if assigned
+          if (newLead.assigned_to) {
+            await client.from('notifications').insert([
+              {
+                business_id: activeBusiness.id,
+                user_id: newLead.assigned_to,
+                type: 'lead_assigned',
+                title: `Lead Assigned: ${newLead.name}`,
+                message: `You have been assigned lead "${newLead.name}" (${newLead.company || 'Prospect'}).`,
+                link_section: 'leads',
+                entity_id: inserted.id,
+              },
+            ]);
+          }
+
           await loadCrmData();
           window.dispatchEvent(new Event('ecomhub_leads_updated'));
           return { success: true, lead: inserted };
@@ -461,6 +476,17 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         user_id: user?.id || null,
       });
 
+      if (newLead.assigned_to && newLead.assigned_to !== user?.id) {
+        await addNotification({
+          title: `Lead Assigned: ${newLead.name}`,
+          message: `You have been assigned lead "${newLead.name}" (${newLead.company || 'Prospect'}).`,
+          link_section: 'leads',
+          entity_id: newLead.id,
+          type: 'lead_assigned',
+          user_id: newLead.assigned_to,
+        });
+      }
+
       window.dispatchEvent(new Event('ecomhub_leads_updated'));
       return { success: true, lead: newLead };
     } catch (err: any) {
@@ -482,6 +508,7 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           .eq('business_id', activeBusiness.id);
         if (error) throw error;
         await loadCrmData();
+        window.dispatchEvent(new Event('ecomhub_leads_updated'));
         return { success: true };
       } catch (err: any) {
         return { success: false, error: err.message };
@@ -496,6 +523,7 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       );
       localStorage.setItem(LS_LEADS_KEY, JSON.stringify(updated));
       setLeads((prev) => prev.map((l) => (l.id === leadId ? { ...l, ...updates, updated_at: new Date().toISOString() } : l)));
+      window.dispatchEvent(new Event('ecomhub_leads_updated'));
       return { success: true };
     } catch (err: any) {
       return { success: false, error: err.message };
@@ -512,6 +540,7 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         const { error } = await client.from('leads').delete().eq('id', leadId).eq('business_id', activeBusiness.id);
         if (error) throw error;
         await loadCrmData();
+        window.dispatchEvent(new Event('ecomhub_leads_updated'));
         return { success: true };
       } catch (err: any) {
         return { success: false, error: err.message };
@@ -524,6 +553,7 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const filtered = all.filter((l) => l.id !== leadId);
       localStorage.setItem(LS_LEADS_KEY, JSON.stringify(filtered));
       setLeads((prev) => prev.filter((l) => l.id !== leadId));
+      window.dispatchEvent(new Event('ecomhub_leads_updated'));
       return { success: true };
     } catch (err: any) {
       return { success: false, error: err.message };
@@ -836,6 +866,7 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       notes: data.notes || null,
       total_revenue: data.total_revenue || 0,
       outstanding_balance: data.outstanding_balance || 0,
+      originating_lead_id: data.originating_lead_id || (data as any).source_lead_id || null,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     };
@@ -846,7 +877,8 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         const { data: inserted, error } = await client.from('clients').insert([newClient]).select().single();
         if (error) throw error;
         await loadCrmData();
-        return { success: true, client: inserted };
+        window.dispatchEvent(new Event('ecomhub_clients_updated'));
+        return { success: true, client: inserted || newClient };
       } catch (err: any) {
         return { success: false, error: err.message };
       }
@@ -882,6 +914,7 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         user_id: user?.id || null,
       });
 
+      window.dispatchEvent(new Event('ecomhub_clients_updated'));
       return { success: true, client: newClient };
     } catch (err: any) {
       return { success: false, error: err.message };
@@ -1100,6 +1133,8 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       notes: `Converted from lead: ${targetLead.name}. Original inquiry: "${targetLead.message || 'None'}"`,
       total_revenue: targetLead.budget ? Number(targetLead.budget) : 0,
       outstanding_balance: 0,
+      originating_lead_id: leadId,
+      source_lead_id: leadId,
     };
 
     const clientRes = await addClient(clientData);

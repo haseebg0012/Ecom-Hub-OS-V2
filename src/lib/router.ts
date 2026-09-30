@@ -27,7 +27,8 @@ export interface RouteResolution {
  */
 export function resolveRoute(
   pathname: string,
-  userRole: BusinessRole | null | undefined
+  userRole: BusinessRole | BusinessRole[] | string | string[] | null | undefined,
+  user?: any
 ): RouteResolution {
   // Clean pathname (remove hashes, search queries, trailing slashes)
   const rawPath = pathname.split('?')[0].split('#')[0].trim();
@@ -45,7 +46,7 @@ export function resolveRoute(
 
   // 2. Check Role Authorization for this path
   // If user has a role, check permission; if not logged in / no role, default to dashboard
-  const isAuthorized = userRole ? canRoleAccessRoute(userRole, path) : true;
+  const isAuthorized = (userRole || user) ? canRoleAccessRoute(userRole, path, user) : true;
 
   if (!isAuthorized) {
     return {

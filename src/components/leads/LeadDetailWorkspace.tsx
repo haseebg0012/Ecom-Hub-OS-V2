@@ -25,6 +25,7 @@ import {
 } from 'lucide-react';
 import { useCrm } from '../../lib/crm-context';
 import { useAuth } from '../../lib/auth-context';
+import { usePermissions } from '../../lib/use-permissions';
 import { Lead, LeadStatus, LeadPriority, CrmActivityType, Client } from '../../types';
 import { CurrencyConverterModal } from '../common/CurrencyConverterModal';
 import { SUPPORTED_CURRENCIES, resolveCurrency } from '../../lib/currencies';
@@ -54,6 +55,10 @@ export const LeadDetailWorkspace: React.FC<LeadDetailWorkspaceProps> = ({
     addNotification,
   } = useCrm();
   const { user, members, activeBusiness } = useAuth();
+  const { can, isOwner } = usePermissions();
+  const canEdit = isOwner || can('crm.edit');
+  const canDelete = isOwner || can('crm.delete');
+  const canCreateClient = isOwner || can('crm.create');
 
   const [activeTab, setActiveTab] = useState<'overview' | 'calls' | 'followups' | 'notes' | 'timeline'>('overview');
 
@@ -112,15 +117,25 @@ export const LeadDetailWorkspace: React.FC<LeadDetailWorkspaceProps> = ({
 
     if (specialistId) {
       const specialist = opsSpecialists.find((s) => s.id === specialistId);
-      const specialistName = specialist?.name || 'Operations Specialist';
+      const specialistName = specialist?.name || 'Specialist';
+
+      // 0. Record assignment activity in canonical crm_activities
+      try {
+        await addLeadActivity(
+          lead.id,
+          'Assignment',
+          `Lead assigned to ${specialistName}`,
+          `Lead "${lead.name}" assigned to ${specialistName}.`
+        );
+      } catch {}
 
       // 1. Notification to the specialist
       try {
         await addNotification({
           user_id: specialistId,
-          type: 'lead_capture',
-          title: `Lead & Task Assigned: ${lead.name}`,
-          message: `You have been assigned as the Operations Specialist for lead "${lead.name}" (${lead.company || 'Prospect'}). Service: ${lead.service || 'Operations'}.`,
+          type: 'lead_assigned',
+          title: `Lead Assigned: ${lead.name}`,
+          message: `You have been assigned lead "${lead.name}" (${lead.company || 'Prospect'}).`,
           link_section: 'leads',
           entity_id: lead.id,
         });
@@ -367,28 +382,38 @@ export const LeadDetailWorkspace: React.FC<LeadDetailWorkspaceProps> = ({
         <div className="flex items-center gap-2.5 flex-wrap">
           {/* Status Dropdown */}
           <div className="relative">
-            <select
-              value={lead.status}
-              onChange={(e) => updateLeadStatus(lead.id, e.target.value as LeadStatus)}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-colors cursor-pointer focus:outline-none ${getStatusColor(
-                lead.status
-              )}`}
-            >
-              {[
-                'New',
-                'Contacted',
-                'Qualified',
-                'Meeting',
-                'Proposal',
-                'Negotiation',
-                'Won',
-                'Lost',
-              ].map((st) => (
-                <option key={st} value={st}>
-                  {st}
-                </option>
-              ))}
-            </select>
+            {canEdit ? (
+              <select
+                value={lead.status}
+                onChange={(e) => updateLeadStatus(lead.id, e.target.value as LeadStatus)}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-colors cursor-pointer focus:outline-none ${getStatusColor(
+                  lead.status
+                )}`}
+              >
+                {[
+                  'New',
+                  'Contacted',
+                  'Qualified',
+                  'Meeting',
+                  'Proposal',
+                  'Negotiation',
+                  'Won',
+                  'Lost',
+                ].map((st) => (
+                  <option key={st} value={st}>
+                    {st}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <span
+                className={`inline-block px-3 py-1.5 rounded-xl text-xs font-bold border ${getStatusColor(
+                  lead.status
+                )}`}
+              >
+                {lead.status}
+              </span>
+            )}
           </div>
 
           {/* Convert to Client Button */}
@@ -400,7 +425,7 @@ export const LeadDetailWorkspace: React.FC<LeadDetailWorkspaceProps> = ({
               <CheckCircle2 className="w-3.5 h-3.5" />
               <span>View Converted Client</span>
             </button>
-          ) : (
+          ) : canCreateClient && canEdit ? (
             <button
               onClick={handleOpenConvert}
               className="px-3.5 py-1.5 text-xs font-semibold text-white bg-[#4F46E5] hover:bg-[#4338CA] rounded-xl shadow-2xs transition-colors flex items-center gap-1.5"
@@ -408,7 +433,7 @@ export const LeadDetailWorkspace: React.FC<LeadDetailWorkspaceProps> = ({
               <UserPlus className="w-3.5 h-3.5" />
               <span>Convert to Client</span>
             </button>
-          )}
+          ) : null}
         </div>
       </div>
 
@@ -440,19 +465,29 @@ export const LeadDetailWorkspace: React.FC<LeadDetailWorkspaceProps> = ({
         <div className="p-4 rounded-xl bg-white border border-[#E2E8F0] shadow-2xs space-y-1">
           <span className="text-xs text-[#64748B] block">Priority Level</span>
           <div>
-            <select
-              value={lead.priority}
-              onChange={(e) => updateLead(lead.id, { priority: e.target.value as LeadPriority })}
-              className={`px-2.5 py-1 rounded-lg text-xs font-bold border focus:outline-none cursor-pointer ${getPriorityColor(
-                lead.priority
-              )}`}
-            >
-              {['Low', 'Medium', 'High', 'Urgent'].map((pr) => (
-                <option key={pr} value={pr}>
-                  {pr} Priority
-                </option>
-              ))}
-            </select>
+            {canEdit ? (
+              <select
+                value={lead.priority}
+                onChange={(e) => updateLead(lead.id, { priority: e.target.value as LeadPriority })}
+                className={`px-2.5 py-1 rounded-lg text-xs font-bold border focus:outline-none cursor-pointer ${getPriorityColor(
+                  lead.priority
+                )}`}
+              >
+                {['Low', 'Medium', 'High', 'Urgent'].map((pr) => (
+                  <option key={pr} value={pr}>
+                    {pr} Priority
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <span
+                className={`inline-block px-2.5 py-1 rounded-lg text-xs font-bold border ${getPriorityColor(
+                  lead.priority
+                )}`}
+              >
+                {lead.priority} Priority
+              </span>
+            )}
           </div>
           <p className="text-[11px] text-[#94A3B8]">Workflow urgency rank</p>
         </div>

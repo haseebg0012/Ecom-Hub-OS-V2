@@ -438,145 +438,67 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   const getInitialDemoRecurring = (_bizId: string): RecurringTransaction[] => [];
 
-  // Initialize data on mount or businessId change
-  useEffect(() => {
+  // Canonical Hydration from authoritative persistent database
+  const loadCanonicalFinanceData = useCallback(async () => {
     setIsLoading(true);
 
     try {
-      // 1. Accounts
-      const rawAccounts = localStorage.getItem(`${LS_ACCOUNTS_KEY}_${businessId}`);
-      let currentAccounts: FinancialAccount[] = [];
-      if (rawAccounts) {
-        const parsed = JSON.parse(rawAccounts);
-        currentAccounts = (parsed || []).map((a: any) => {
-          if (
-            !localStorage.getItem('ecomhub_fresh_clean_v16_accounts_zero') ||
-            a.opening_balance === 1500000 ||
-            a.opening_balance === 25000 ||
-            a.opening_balance === 8000 ||
-            a.opening_balance === 100000 ||
-            a.current_balance === 2450000 ||
-            a.current_balance === 38450 ||
-            a.current_balance === 12150 ||
-            a.current_balance === 65000
-          ) {
-            return { ...a, opening_balance: 0, current_balance: 0 };
-          }
-          return a;
-        });
-        setAccounts(currentAccounts);
-        localStorage.setItem(`${LS_ACCOUNTS_KEY}_${businessId}`, JSON.stringify(currentAccounts));
-      } else {
-        const initial = getInitialDemoAccounts(businessId);
-        currentAccounts = initial;
-        setAccounts(initial);
-        localStorage.setItem(`${LS_ACCOUNTS_KEY}_${businessId}`, JSON.stringify(initial));
-      }
+      // 1. Fetch live canonical data in parallel from API endpoints
+      const [
+        accsRes,
+        catsRes,
+        setsRes,
+        invsRes,
+        itemsRes,
+        paysRes,
+        expsRes,
+        incsRes,
+        invstsRes,
+        recsRes,
+        runsRes,
+      ] = await Promise.all([
+        fetch(`/api/finance/accounts?business_id=${businessId}`).then((r) => r.ok ? r.json() : []).catch(() => []),
+        fetch(`/api/finance/categories?business_id=${businessId}`).then((r) => r.ok ? r.json() : []).catch(() => []),
+        fetch(`/api/finance/settings?business_id=${businessId}`).then((r) => r.ok ? r.json() : null).catch(() => null),
+        fetch(`/api/finance/invoices?business_id=${businessId}`).then((r) => r.ok ? r.json() : []).catch(() => []),
+        fetch(`/rest/v1/invoice_items?business_id=eq.${businessId}`).then((r) => r.ok ? r.json() : []).catch(() => []),
+        fetch(`/api/finance/payments?business_id=${businessId}`).then((r) => r.ok ? r.json() : []).catch(() => []),
+        fetch(`/api/finance/expenses?business_id=${businessId}`).then((r) => r.ok ? r.json() : []).catch(() => []),
+        fetch(`/api/finance/income?business_id=${businessId}`).then((r) => r.ok ? r.json() : []).catch(() => []),
+        fetch(`/api/finance/investments?business_id=${businessId}`).then((r) => r.ok ? r.json() : []).catch(() => []),
+        fetch(`/api/finance/recurring?business_id=${businessId}`).then((r) => r.ok ? r.json() : []).catch(() => []),
+        fetch(`/rest/v1/recurring_runs?business_id=eq.${businessId}`).then((r) => r.ok ? r.json() : []).catch(() => []),
+      ]);
 
-      // 2. Categories
-      const rawCats = localStorage.getItem(`${LS_CATEGORIES_KEY}_${businessId}`);
-      if (rawCats) {
-        setCategories(JSON.parse(rawCats));
-      } else {
-        const initial = getInitialDemoCategories(businessId);
-        setCategories(initial);
-        localStorage.setItem(`${LS_CATEGORIES_KEY}_${businessId}`, JSON.stringify(initial));
-      }
+      const currentAccounts: FinancialAccount[] = Array.isArray(accsRes) && accsRes.length > 0 ? accsRes : getInitialDemoAccounts(businessId);
+      const currentCats: FinancialCategory[] = Array.isArray(catsRes) && catsRes.length > 0 ? catsRes : getInitialDemoCategories(businessId);
+      const currentSettings: BusinessFinanceSettings = setsRes || getInitialDemoSettings(businessId);
+      const currentInvoices: Invoice[] = Array.isArray(invsRes) ? invsRes : [];
+      const currentItems: InvoiceItem[] = Array.isArray(itemsRes) ? itemsRes : [];
+      const currentPayments: Payment[] = Array.isArray(paysRes) ? paysRes : [];
+      const currentExpenses: Expense[] = Array.isArray(expsRes) ? expsRes : [];
+      const currentIncome: IncomeRecord[] = Array.isArray(incsRes) ? incsRes : [];
+      const currentInvestments: Investment[] = Array.isArray(invstsRes) ? invstsRes : [];
+      const currentRecurring: RecurringTransaction[] = Array.isArray(recsRes) ? recsRes : [];
+      const currentRuns: RecurringTransactionRun[] = Array.isArray(runsRes) ? runsRes : [];
 
-      // 3. Settings
-      const rawSettings = localStorage.getItem(`${LS_SETTINGS_KEY}_${businessId}`);
-      if (rawSettings) {
-        setFinanceSettings(JSON.parse(rawSettings));
-      } else {
-        const initial = getInitialDemoSettings(businessId);
-        setFinanceSettings(initial);
-        localStorage.setItem(`${LS_SETTINGS_KEY}_${businessId}`, JSON.stringify(initial));
-      }
+      // Reconstruct transactions central ledger purely from actual financial records
+      const loadedTrx = getInitialDemoTransactions(
+        businessId,
+        currentPayments,
+        currentExpenses,
+        currentInvestments
+      );
 
-      // 4. Invoices & Items
-      const rawInvoices = localStorage.getItem(`${LS_INVOICES_KEY}_${businessId}`);
-      const rawItems = localStorage.getItem(`${LS_INVOICE_ITEMS_KEY}_${businessId}`);
-      if (rawInvoices && rawItems) {
-        setInvoices(JSON.parse(rawInvoices));
-        setInvoiceItems(JSON.parse(rawItems));
-      } else {
-        const initial = getInitialDemoInvoices(businessId);
-        setInvoices(initial.invoices);
-        setInvoiceItems(initial.items);
-        localStorage.setItem(`${LS_INVOICES_KEY}_${businessId}`, JSON.stringify(initial.invoices));
-        localStorage.setItem(`${LS_INVOICE_ITEMS_KEY}_${businessId}`, JSON.stringify(initial.items));
-      }
-
-      // 5. Payments
-      const rawPayments = localStorage.getItem(`${LS_PAYMENTS_KEY}_${businessId}`);
-      let currentPayments: Payment[] = [];
-      if (rawPayments) {
-        currentPayments = JSON.parse(rawPayments);
-        setPayments(currentPayments);
-      } else {
-        currentPayments = getInitialDemoPayments(businessId);
-        setPayments(currentPayments);
-        localStorage.setItem(`${LS_PAYMENTS_KEY}_${businessId}`, JSON.stringify(currentPayments));
-      }
-
-      // 6. Expenses
-      const rawExpenses = localStorage.getItem(`${LS_EXPENSES_KEY}_${businessId}`);
-      let currentExpenses: Expense[] = [];
-      if (rawExpenses) {
-        currentExpenses = JSON.parse(rawExpenses);
-        setExpenses(currentExpenses);
-      } else {
-        currentExpenses = getInitialDemoExpenses(businessId);
-        setExpenses(currentExpenses);
-        localStorage.setItem(`${LS_EXPENSES_KEY}_${businessId}`, JSON.stringify(currentExpenses));
-      }
-
-      // 7. Income (Direct)
-      const rawIncome = localStorage.getItem(`${LS_INCOME_KEY}_${businessId}`);
-      if (rawIncome) {
-        setIncomeRecords(JSON.parse(rawIncome));
-      } else {
-        setIncomeRecords([]);
-      }
-
-      // 8. Investments
-      const rawInvestments = localStorage.getItem(`${LS_INVESTMENTS_KEY}_${businessId}`);
-      let currentInvestments: Investment[] = [];
-      if (rawInvestments) {
-        currentInvestments = JSON.parse(rawInvestments);
-        setInvestments(currentInvestments);
-      } else {
-        currentInvestments = getInitialDemoInvestments(businessId);
-        setInvestments(currentInvestments);
-        localStorage.setItem(`${LS_INVESTMENTS_KEY}_${businessId}`, JSON.stringify(currentInvestments));
-      }
-
-      // 9. Transactions
-      const rawTransactions = localStorage.getItem(`${LS_TRANSACTIONS_KEY}_${businessId}`);
-      let loadedTrx: Transaction[] = [];
-      if (rawTransactions) {
-        loadedTrx = JSON.parse(rawTransactions);
-        setTransactions(loadedTrx);
-      } else {
-        const initialTrx = getInitialDemoTransactions(
-          businessId,
-          currentPayments,
-          currentExpenses,
-          currentInvestments
-        );
-        loadedTrx = initialTrx;
-        setTransactions(initialTrx);
-        localStorage.setItem(`${LS_TRANSACTIONS_KEY}_${businessId}`, JSON.stringify(initialTrx));
-      }
-
-      // Reconcile account balances based on transactions and opening balances
+      // Reconcile account balances based on transactions and real opening balance
       const reconciledAccounts = currentAccounts.map((acc) => {
-        const accTrx = loadedTrx.filter((t) => t.account_id === acc.id && t.status === 'completed');
+        const accTrx = loadedTrx.filter((t) => t.account_id === acc.id && (t.status === 'completed' || (t.status as any) === 'Completed'));
         const netChange = accTrx.reduce((sum, t) => {
           const amt = Number(t.amount) || 0;
-          if (t.transaction_type === 'income' || t.transaction_type === 'refund') {
+          const type = (t.transaction_type || '').toLowerCase();
+          if (type === 'income' || type === 'refund') {
             return sum + amt;
-          } else if (t.transaction_type === 'expense' || t.transaction_type === 'investment') {
+          } else if (type === 'expense' || type === 'investment') {
             return sum - amt;
           }
           return sum;
@@ -586,34 +508,41 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
           current_balance: Number(acc.opening_balance || 0) + netChange,
         };
       });
+
       setAccounts(reconciledAccounts);
-      localStorage.setItem(`${LS_ACCOUNTS_KEY}_${businessId}`, JSON.stringify(reconciledAccounts));
-
-      // 10. Recurring
-      const rawRecurring = localStorage.getItem(`${LS_RECURRING_KEY}_${businessId}`);
-      if (rawRecurring) {
-        setRecurringTransactions(JSON.parse(rawRecurring));
-      } else {
-        const initialRec = getInitialDemoRecurring(businessId);
-        setRecurringTransactions(initialRec);
-        localStorage.setItem(`${LS_RECURRING_KEY}_${businessId}`, JSON.stringify(initialRec));
-      }
-
-      // 11. Recurring Runs
-      const rawRuns = localStorage.getItem(`${LS_RECURRING_RUNS_KEY}_${businessId}`);
-      if (rawRuns) {
-        setRecurringRuns(JSON.parse(rawRuns));
-      } else {
-        setRecurringRuns([]);
-      }
+      setCategories(currentCats);
+      setFinanceSettings(currentSettings);
+      setInvoices(currentInvoices);
+      setInvoiceItems(currentItems);
+      setPayments(currentPayments);
+      setExpenses(currentExpenses);
+      setIncomeRecords(currentIncome);
+      setInvestments(currentInvestments);
+      setRecurringTransactions(currentRecurring);
+      setRecurringRuns(currentRuns);
+      setTransactions(loadedTrx);
     } catch (err) {
-      console.error('Error hydrating finance context:', err);
+      console.error('Error hydrating canonical finance data:', err);
     } finally {
       setIsLoading(false);
     }
   }, [businessId]);
 
-  // Persist state changes to LocalStorage
+  // Initial load & external sync listener
+  useEffect(() => {
+    loadCanonicalFinanceData();
+
+    const handleSync = () => {
+      loadCanonicalFinanceData();
+    };
+
+    window.addEventListener('ecomhub_finance_sync_requested', handleSync);
+    return () => {
+      window.removeEventListener('ecomhub_finance_sync_requested', handleSync);
+    };
+  }, [loadCanonicalFinanceData]);
+
+  // Persist transient UI cache to LocalStorage for offline resilience
   useEffect(() => {
     if (!isLoading) {
       localStorage.setItem(`${LS_ACCOUNTS_KEY}_${businessId}`, JSON.stringify(accounts));
@@ -643,6 +572,7 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
     incomeRecords,
     investments,
     recurringTransactions,
+    recurringRuns,
     businessId,
     isLoading,
   ]);
@@ -934,6 +864,21 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
         updated_at: new Date().toISOString(),
       };
 
+      // Persist to canonical server endpoint
+      try {
+        const res = await fetch('/api/finance/invoices', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(newInvoice),
+        });
+        if (!res.ok) {
+          const errJson = await res.json().catch(() => ({}));
+          return { success: false, error: errJson.error || 'Failed to persist invoice.' };
+        }
+      } catch (err: any) {
+        console.warn('Network error saving invoice to canonical database:', err);
+      }
+
       setInvoices((prev) => [newInvoice, ...prev]);
       setInvoiceItems((prev) => [...lineItemEntities, ...prev]);
 
@@ -960,6 +905,9 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
         link_section: 'finance',
         entity_id: newInvoice.id,
       });
+
+      window.dispatchEvent(new CustomEvent('ecomhub_finance_updated'));
+      window.dispatchEvent(new CustomEvent('ecomhub_invoices_updated'));
 
       return { success: true, invoice: newInvoice };
     } catch (err: any) {
@@ -1023,7 +971,22 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
         updated_at: new Date().toISOString(),
       };
 
+      try {
+        const res = await fetch(`/api/finance/invoices/${invoiceId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(updatedInvoice),
+        });
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          return { success: false, error: errData.error || 'Failed to update invoice in canonical database.' };
+        }
+      } catch (err: any) {
+        return { success: false, error: err.message || 'Network error updating invoice.' };
+      }
+
       setInvoices((prev) => prev.map((inv) => (inv.id === invoiceId ? updatedInvoice : inv)));
+      window.dispatchEvent(new CustomEvent('ecomhub_finance_updated'));
       return { success: true };
     } catch (err: any) {
       return { success: false, error: err.message || 'Error updating invoice.' };
@@ -1035,11 +998,26 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
     status: InvoiceStatus
   ): Promise<{ success: boolean; error?: string }> => {
     try {
+      try {
+        const res = await fetch(`/api/finance/invoices/${invoiceId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status }),
+        });
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          return { success: false, error: errData.error || 'Failed to update invoice status.' };
+        }
+      } catch (err: any) {
+        return { success: false, error: err.message || 'Network error updating invoice status.' };
+      }
+
       setInvoices((prev) =>
         prev.map((inv) =>
           inv.id === invoiceId ? { ...inv, status, updated_at: new Date().toISOString() } : inv
         )
       );
+      window.dispatchEvent(new CustomEvent('ecomhub_finance_updated'));
       return { success: true };
     } catch (err: any) {
       return { success: false, error: err.message };
@@ -1070,8 +1048,20 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   const deleteInvoice = async (invoiceId: string): Promise<{ success: boolean; error?: string }> => {
     try {
+      try {
+        const res = await fetch(`/api/finance/invoices/${invoiceId}`, {
+          method: 'DELETE',
+        });
+        if (!res.ok) {
+          return { success: false, error: 'Failed to delete invoice from canonical database.' };
+        }
+      } catch (err: any) {
+        return { success: false, error: err.message || 'Network error deleting invoice.' };
+      }
+
       setInvoices((prev) => prev.filter((i) => i.id !== invoiceId));
       setInvoiceItems((prev) => prev.filter((i) => i.invoice_id !== invoiceId));
+      window.dispatchEvent(new CustomEvent('ecomhub_finance_updated'));
       return { success: true };
     } catch (err: any) {
       return { success: false, error: err.message };
@@ -1174,6 +1164,21 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       };
+
+      // Persist to canonical server endpoint
+      try {
+        const res = await fetch('/api/finance/payments', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(newPayment),
+        });
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          return { success: false, error: errData.error || 'Failed to record payment in canonical database.' };
+        }
+      } catch (err: any) {
+        console.warn('Network error saving payment:', err);
+      }
 
       // 2. Update Invoice Status and Balance
       if (invoice) {
@@ -1347,6 +1352,19 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
         entity_id: payment.id,
       });
 
+      try {
+        await fetch(`/api/finance/payments/${paymentId}/cancel`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ reason }),
+        });
+      } catch (err) {
+        console.warn('Failed to cancel payment on server:', err);
+      }
+
+      window.dispatchEvent(new CustomEvent('ecomhub_finance_updated'));
+      window.dispatchEvent(new CustomEvent('ecomhub_payments_updated'));
+
       return { success: true };
     } catch (err: any) {
       console.error('Failed to cancel payment:', err);
@@ -1431,6 +1449,21 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
         updated_at: new Date().toISOString(),
       };
 
+      // Persist to canonical server endpoint
+      try {
+        const res = await fetch('/api/finance/expenses', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(newExpense),
+        });
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          return { success: false, error: errData.error || 'Failed to persist expense.' };
+        }
+      } catch (err: any) {
+        console.warn('Network error saving expense:', err);
+      }
+
       const updatedTrx = [newTransaction, ...transactions];
       setExpenses((prev) => [newExpense, ...prev]);
       setTransactions(updatedTrx);
@@ -1447,6 +1480,9 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
           entity_id: newExpense.id,
         });
       }
+
+      window.dispatchEvent(new CustomEvent('ecomhub_finance_updated'));
+      window.dispatchEvent(new CustomEvent('ecomhub_expenses_updated'));
 
       return { success: true, expense: newExpense };
     } catch (err: any) {
@@ -1467,6 +1503,20 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
         ...updates,
         updated_at: new Date().toISOString(),
       };
+
+      try {
+        const res = await fetch(`/api/finance/expenses/${id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(updates),
+        });
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          return { success: false, error: errData.error || 'Failed to update expense in canonical database.' };
+        }
+      } catch (err: any) {
+        return { success: false, error: err.message || 'Network error updating expense.' };
+      }
 
       setExpenses((prev) => prev.map((e) => (e.id === id ? updatedExpense : e)));
 
@@ -1489,6 +1539,8 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
         );
       }
 
+      window.dispatchEvent(new CustomEvent('ecomhub_finance_updated'));
+
       return { success: true };
     } catch (err: any) {
       return { success: false, error: err.message };
@@ -1500,12 +1552,25 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
       const existing = expenses.find((e) => e.id === id);
       if (!existing) return { success: false, error: 'Expense not found.' };
 
+      try {
+        const res = await fetch(`/api/finance/expenses/${id}`, {
+          method: 'DELETE',
+        });
+        if (!res.ok) {
+          return { success: false, error: 'Failed to delete expense from canonical database.' };
+        }
+      } catch (err: any) {
+        return { success: false, error: err.message || 'Network error deleting expense.' };
+      }
+
       setExpenses((prev) => prev.filter((e) => e.id !== id));
       if (existing.transaction_id) {
         const updatedTrx = transactions.filter((t) => t.id !== existing.transaction_id);
         setTransactions(updatedTrx);
         setAccounts((prev) => recomputeAccountBalances(prev, updatedTrx));
       }
+
+      window.dispatchEvent(new CustomEvent('ecomhub_finance_updated'));
 
       return { success: true };
     } catch (err: any) {
@@ -1594,6 +1659,17 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
       setTransactions(updatedTrx);
       setAccounts((prev) => recomputeAccountBalances(prev, updatedTrx));
 
+      try {
+        await fetch('/api/finance/income', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(newIncome),
+        });
+      } catch (err) {
+        console.warn('Network error saving income:', err);
+      }
+      window.dispatchEvent(new CustomEvent('ecomhub_finance_updated'));
+
       return { success: true, income: newIncome };
     } catch (err: any) {
       return { success: false, error: err.message };
@@ -1677,6 +1753,17 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
       setTransactions(updatedTrx);
       setAccounts((prev) => recomputeAccountBalances(prev, updatedTrx));
 
+      try {
+        await fetch('/api/finance/investments', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(newInvestment),
+        });
+      } catch (err) {
+        console.warn('Network error saving investment:', err);
+      }
+      window.dispatchEvent(new CustomEvent('ecomhub_finance_updated'));
+
       return { success: true, investment: newInvestment };
     } catch (err: any) {
       return { success: false, error: err.message };
@@ -1697,7 +1784,18 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
         updated_at: new Date().toISOString(),
       };
 
+      try {
+        await fetch('/api/finance/accounts', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(newAcc),
+        });
+      } catch (err) {
+        console.warn('Network error saving account:', err);
+      }
+
       setAccounts((prev) => [...prev, newAcc]);
+      window.dispatchEvent(new CustomEvent('ecomhub_finance_updated'));
       return { success: true, account: newAcc };
     } catch (err: any) {
       return { success: false, error: err.message };
@@ -1709,9 +1807,20 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
     updates: Partial<FinancialAccount>
   ): Promise<{ success: boolean; error?: string }> => {
     try {
+      try {
+        await fetch(`/api/finance/accounts/${id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(updates),
+        });
+      } catch (err) {
+        console.warn('Network error updating account:', err);
+      }
+
       setAccounts((prev) =>
         prev.map((a) => (a.id === id ? { ...a, ...updates, updated_at: new Date().toISOString() } : a))
       );
+      window.dispatchEvent(new CustomEvent('ecomhub_finance_updated'));
       return { success: true };
     } catch (err: any) {
       return { success: false, error: err.message };
@@ -1720,9 +1829,22 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   const toggleAccountActive = async (id: string): Promise<{ success: boolean; error?: string }> => {
     try {
+      const acc = accounts.find((a) => a.id === id);
+      const nextActive = acc ? !acc.is_active : true;
+      try {
+        await fetch(`/api/finance/accounts/${id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ is_active: nextActive }),
+        });
+      } catch (err) {
+        console.warn('Network error toggling account active:', err);
+      }
+
       setAccounts((prev) =>
-        prev.map((a) => (a.id === id ? { ...a, is_active: !a.is_active, updated_at: new Date().toISOString() } : a))
+        prev.map((a) => (a.id === id ? { ...a, is_active: nextActive, updated_at: new Date().toISOString() } : a))
       );
+      window.dispatchEvent(new CustomEvent('ecomhub_finance_updated'));
       return { success: true };
     } catch (err: any) {
       return { success: false, error: err.message };
@@ -1742,7 +1864,18 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
         updated_at: new Date().toISOString(),
       };
 
+      try {
+        await fetch('/api/finance/categories', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(newCat),
+        });
+      } catch (err) {
+        console.warn('Network error saving category:', err);
+      }
+
       setCategories((prev) => [...prev, newCat]);
+      window.dispatchEvent(new CustomEvent('ecomhub_finance_updated'));
       return { success: true, category: newCat };
     } catch (err: any) {
       return { success: false, error: err.message };
@@ -1754,9 +1887,20 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
     updates: Partial<FinancialCategory>
   ): Promise<{ success: boolean; error?: string }> => {
     try {
+      try {
+        await fetch(`/api/finance/categories/${id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(updates),
+        });
+      } catch (err) {
+        console.warn('Network error updating category:', err);
+      }
+
       setCategories((prev) =>
         prev.map((c) => (c.id === id ? { ...c, ...updates, updated_at: new Date().toISOString() } : c))
       );
+      window.dispatchEvent(new CustomEvent('ecomhub_finance_updated'));
       return { success: true };
     } catch (err: any) {
       return { success: false, error: err.message };

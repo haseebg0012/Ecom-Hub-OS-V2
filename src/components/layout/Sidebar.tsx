@@ -54,7 +54,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onCloseMobile,
 }) => {
   const { user, activeBusiness, logout } = useAuth();
-  const { can } = usePermissions();
+  const { can, effectiveAccess, isOwner } = usePermissions();
 
   const allNavigationGroups: NavGroup[] = [
     {
@@ -200,32 +200,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
     };
   }, []);
 
-  const rawUiVis = localStorage.getItem('ecomhub_ui_role_visibility');
-  const uiVisMap = rawUiVis ? JSON.parse(rawUiVis) : {};
-  const currentRoles = activeBusiness?.roles || (activeBusiness?.role ? [activeBusiness.role] : ['Viewer']);
-
   const isItemVisible = (itemId: string) => {
-    if (currentRoles.includes('Owner')) return true;
-
-    // For multiple roles: if ANY role explicitly allows the item, show it!
-    let anyAllowed = false;
-    let anyDenied = false;
-
-    for (const r of currentRoles) {
-      if (uiVisMap[r]) {
-        if (uiVisMap[r][itemId] === true) {
-          anyAllowed = true;
-          break;
-        } else if (uiVisMap[r][itemId] === false) {
-          anyDenied = true;
-        }
-      }
-    }
-
-    if (anyAllowed) return true;
-    if (anyDenied) return false;
-
-    return true;
+    if (isOwner) return true;
+    return effectiveAccess.canAccessTab(itemId);
   };
 
   const navigationGroups = allNavigationGroups
@@ -233,9 +210,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
       ...group,
       items: group.items.filter((item) => {
         if (!isItemVisible(item.id)) return false;
-        if (item.id === 'login-history') {
-          return currentRoles.includes('Owner') || currentRoles.includes('Admin') || currentRoles.includes('Finance');
-        }
         return item.requiredPermission ? can(item.requiredPermission) : true;
       }),
     }))

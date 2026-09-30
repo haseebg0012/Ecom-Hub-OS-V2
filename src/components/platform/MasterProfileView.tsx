@@ -4,13 +4,25 @@ import { useAuth } from '../../lib/auth-context';
 import { getSupabaseClient } from '../../lib/supabase';
 
 export const MasterProfileView: React.FC = () => {
-  const { user, isEmailVerified, resendVerificationEmail } = useAuth();
+  const { user, isEmailVerified, resendVerificationEmail, updateProfile } = useAuth();
   const [firstName, setFirstName] = useState(user?.full_name?.split(' ')[0] || 'Haseeb');
   const [lastName, setLastName] = useState(user?.full_name?.split(' ').slice(1).join(' ') || 'G.');
   const [displayName, setDisplayName] = useState(user?.full_name || 'Haseeb G.');
   const [phone, setPhone] = useState('+92 300 1234567');
   const [dob, setDob] = useState('1995-06-15');
   const [avatarUrl, setAvatarUrl] = useState<string | null>((user as any)?.avatar_url || null);
+
+  // Sync state whenever user updates
+  React.useEffect(() => {
+    if (user?.full_name) {
+      setDisplayName(user.full_name);
+      setFirstName(user.full_name.split(' ')[0] || '');
+      setLastName(user.full_name.split(' ').slice(1).join(' ') || '');
+    }
+    if ((user as any)?.avatar_url) {
+      setAvatarUrl((user as any).avatar_url);
+    }
+  }, [user?.full_name, (user as any)?.avatar_url]);
 
   // Password change state
   const [currentPassword, setCurrentPassword] = useState('');
@@ -20,6 +32,8 @@ export const MasterProfileView: React.FC = () => {
 
   // Profile save state
   const [profileSaved, setProfileSaved] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   // Image Cropper State
   const [showCropModal, setShowCropModal] = useState(false);
@@ -48,16 +62,35 @@ export const MasterProfileView: React.FC = () => {
     reader.readAsDataURL(file);
   };
 
-  const handleSaveCroppedImage = () => {
+  const handleSaveCroppedImage = async () => {
     if (!rawImageSrc) return;
     setIsUploading(true);
-    // Simulate image cropping and saving to state/storage
-    setTimeout(() => {
-      setAvatarUrl(rawImageSrc);
-      setIsUploading(false);
-      setShowCropModal(false);
-      setRawImageSrc(null);
-    }, 600);
+    setAvatarUrl(rawImageSrc);
+    await updateProfile({ avatar_url: rawImageSrc });
+    setIsUploading(false);
+    setShowCropModal(false);
+    setRawImageSrc(null);
+  };
+
+  const handleProfileSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSaving(true);
+    setSaveError(null);
+    setProfileSaved(false);
+
+    const finalName = displayName.trim() || `${firstName.trim()} ${lastName.trim()}`.trim() || 'Haseeb G.';
+    const res = await updateProfile({
+      full_name: finalName,
+      avatar_url: avatarUrl || null,
+    });
+
+    setIsSaving(false);
+    if (res.success) {
+      setProfileSaved(true);
+      setTimeout(() => setProfileSaved(false), 4000);
+    } else {
+      setSaveError(res.error || 'Failed to update profile');
+    }
   };
 
   const handlePasswordChange = async (e: React.FormEvent) => {
@@ -191,12 +224,15 @@ export const MasterProfileView: React.FC = () => {
               </div>
             )}
 
+            {saveError && (
+              <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 text-xs rounded-xl flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 text-red-600 shrink-0" />
+                <span>{saveError}</span>
+              </div>
+            )}
+
             <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                setProfileSaved(true);
-                setTimeout(() => setProfileSaved(false), 4000);
-              }}
+              onSubmit={handleProfileSubmit}
               className="space-y-4"
             >
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -265,9 +301,17 @@ export const MasterProfileView: React.FC = () => {
               <div className="pt-2 flex justify-end">
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-semibold shadow-sm transition-colors"
+                  disabled={isSaving}
+                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-xl text-xs font-semibold shadow-sm transition-colors flex items-center gap-1.5"
                 >
-                  Save Profile Changes
+                  {isSaving ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <span>Saving...</span>
+                    </>
+                  ) : (
+                    <span>Save Profile Changes</span>
+                  )}
                 </button>
               </div>
             </form>

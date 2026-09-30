@@ -6,6 +6,7 @@
  */
 
 import { BusinessRole } from '../types';
+import { getEffectivePermissions } from './effective-permissions';
 
 // Central Module List
 export type AppModule =
@@ -165,116 +166,79 @@ function getEquivalentPermissionKeys(permission: string): string[] {
   return keys;
 }
 
-/**
- * Check if a role possesses a specific permission string
- */
-export function hasPermission(role: BusinessRole | BusinessRole[] | undefined | null, permission: PermissionString): boolean {
-  if (!role) return false;
-  const roles = Array.isArray(role) ? role : [role];
-
-  let customMatrix: Record<string, Record<string, boolean>> = {};
-  try {
-    const rawMatrix = localStorage.getItem('ecomhub_role_matrix');
-    if (rawMatrix) {
-      customMatrix = JSON.parse(rawMatrix);
-    }
-  } catch {
-    // ignore
-  }
-
-  const lookupKeys = getEquivalentPermissionKeys(permission);
-
-  for (const r of roles) {
-    if (r === 'Owner') return true;
-
-    const roleMap = customMatrix[r];
-    if (roleMap) {
-      let isExplicitlyAllowed = false;
-      let isExplicitlyDenied = false;
-
-      for (const k of lookupKeys) {
-        if (roleMap[k] === true) {
-          isExplicitlyAllowed = true;
-          break;
-        } else if (roleMap[k] === false) {
-          isExplicitlyDenied = true;
-        }
-      }
-
-      if (isExplicitlyAllowed) return true;
-      if (isExplicitlyDenied) continue; // Denied for this role
-    }
-
-    const permissions = DEFAULT_ROLE_PERMISSIONS[r];
-    if (!permissions) continue;
-
-    // Wildcard full access
-    if (permissions.includes('*.*')) return true;
-
-    // Direct match
-    if (permissions.includes(permission)) return true;
-
-    // Equivalent match
-    for (const k of lookupKeys) {
-      if ((permissions as readonly string[]).includes(k)) return true;
-    }
-
-    // Module wildcard match (e.g. "finance.*")
-    const [module] = permission.split('.');
-    if (permissions.includes(`${module as AppModule}.*`)) return true;
-  }
-
-  return false;
-}
-
-/**
- * Route to Required Permission Mapping
- */
 export interface RoutePermissionRule {
   pattern: RegExp;
-  module: AppModule;
-  action: PermissionAction;
   requiredPermission: PermissionString;
 }
 
 export const ROUTE_PERMISSION_RULES: RoutePermissionRule[] = [
-  // Finance Sub-routes
-  { pattern: /^\/finance\/expenses\/new/, module: 'finance', action: 'create', requiredPermission: 'finance.create' },
-  { pattern: /^\/finance\/income\/new/, module: 'finance', action: 'create', requiredPermission: 'finance.create' },
-  { pattern: /^\/finance\/transactions\/new/, module: 'finance', action: 'create', requiredPermission: 'finance.create' },
-  { pattern: /^\/finance\/accounts\/new/, module: 'finance', action: 'create', requiredPermission: 'finance.create' },
-  { pattern: /^\/finance\/categories\/new/, module: 'finance', action: 'create', requiredPermission: 'finance.create' },
-  { pattern: /^\/finance(\/.*)?$/, module: 'finance', action: 'view', requiredPermission: 'finance.view' },
-
-  // Settings & Team
-  { pattern: /^\/settings\/business(\/.*)?$/, module: 'business_settings', action: 'view', requiredPermission: 'business_settings.view' },
-  { pattern: /^\/business-settings(\/.*)?$/, module: 'business_settings', action: 'view', requiredPermission: 'business_settings.view' },
-  { pattern: /^\/settings\/team(\/.*)?$/, module: 'team_roles', action: 'view', requiredPermission: 'team_roles.view' },
-  { pattern: /^\/team-roles(\/.*)?$/, module: 'team_roles', action: 'view', requiredPermission: 'team_roles.view' },
-  { pattern: /^\/settings\/login-history(\/.*)?$/, module: 'team_roles', action: 'view', requiredPermission: 'team_roles.view' },
-  { pattern: /^\/login-history(\/.*)?$/, module: 'team_roles', action: 'view', requiredPermission: 'team_roles.view' },
-  { pattern: /^\/settings\/integrations(\/.*)?$/, module: 'integrations', action: 'view', requiredPermission: 'integrations.view' },
-  { pattern: /^\/integrations(\/.*)?$/, module: 'integrations', action: 'view', requiredPermission: 'integrations.view' },
-
-  // Operational Modules
-  { pattern: /^\/leads(\/.*)?$/, module: 'leads', action: 'view', requiredPermission: 'leads.view' },
-  { pattern: /^\/clients(\/.*)?$/, module: 'clients', action: 'view', requiredPermission: 'clients.view' },
-  { pattern: /^\/projects(\/.*)?$/, module: 'projects', action: 'view', requiredPermission: 'projects.view' },
-  { pattern: /^\/tasks(\/.*)?$/, module: 'tasks', action: 'view', requiredPermission: 'tasks.view' },
-  { pattern: /^\/employees(\/.*)?$/, module: 'employees', action: 'view', requiredPermission: 'employees.view' },
-  { pattern: /^\/team-members-roles(\/.*)?$/, module: 'employees', action: 'view', requiredPermission: 'employees.view' },
-  { pattern: /^\/documents(\/.*)?$/, module: 'documents', action: 'view', requiredPermission: 'documents.view' },
-  { pattern: /^\/analytics(\/.*)?$/, module: 'analytics', action: 'view', requiredPermission: 'analytics.view' },
-  { pattern: /^\/notifications(\/.*)?$/, module: 'notifications', action: 'view', requiredPermission: 'notifications.view' },
-  { pattern: /^\/copilot(\/.*)?$/, module: 'ai_copilot', action: 'view', requiredPermission: 'ai_copilot.view' },
-  { pattern: /^\/(dashboard)?$/, module: 'dashboard', action: 'view', requiredPermission: 'dashboard.view' },
+  { pattern: /^\/finance(\/.*)?$/, requiredPermission: 'finance.view' },
+  { pattern: /^\/leads(\/.*)?$/, requiredPermission: 'leads.view' },
+  { pattern: /^\/clients(\/.*)?$/, requiredPermission: 'clients.view' },
+  { pattern: /^\/projects(\/.*)?$/, requiredPermission: 'projects.view' },
+  { pattern: /^\/tasks(\/.*)?$/, requiredPermission: 'tasks.view' },
+  { pattern: /^\/team-members-roles(\/.*)?$/, requiredPermission: 'team_roles.view' },
+  { pattern: /^\/settings\/team(\/.*)?$/, requiredPermission: 'team_roles.view' },
+  { pattern: /^\/documents(\/.*)?$/, requiredPermission: 'documents.view' },
+  { pattern: /^\/analytics(\/.*)?$/, requiredPermission: 'analytics.view' },
+  { pattern: /^\/notifications(\/.*)?$/, requiredPermission: 'notifications.view' },
+  { pattern: /^\/settings\/business(\/.*)?$/, requiredPermission: 'business_settings.view' },
+  { pattern: /^\/settings\/login-history(\/.*)?$/, requiredPermission: 'team_roles.view' },
+  { pattern: /^\/settings\/integrations(\/.*)?$/, requiredPermission: 'integrations.view' },
 ];
+
+/**
+ * Check if a role possesses a specific permission string
+ */
+export function hasPermission(
+  role: BusinessRole | BusinessRole[] | string | string[] | undefined | null,
+  permission: PermissionString | string,
+  user?: any
+): boolean {
+  if (!role && !user) return false;
+  const rawRoles = Array.isArray(role) ? role.map(String) : role ? [String(role)] : [];
+
+  const cleanEmail = (user?.email || '').trim().toLowerCase();
+  // Owner always has full access
+  if (
+    cleanEmail === 'haseebg0012@gmail.com' ||
+    user?.id === 'usr-ecometrix-001' ||
+    user?.is_platform_owner === true ||
+    rawRoles.includes('Owner') ||
+    rawRoles.includes('owner')
+  ) {
+    return true;
+  }
+
+  const dummyBiz: any = { roles: rawRoles, role: rawRoles[0] };
+  const effective = getEffectivePermissions(user, dummyBiz);
+  return effective.can(permission);
+}
 
 /**
  * Check if a role is authorized to access a given URL route path
  */
-export function canRoleAccessRoute(role: BusinessRole | BusinessRole[] | undefined | null, pathname: string): boolean {
+export function canRoleAccessRoute(
+  role: BusinessRole | BusinessRole[] | string | string[] | undefined | null,
+  pathname: string,
+  user?: any
+): boolean {
+  const cleanEmail = (user?.email || '').trim().toLowerCase();
+  // Owner always has full access
+  if (
+    cleanEmail === 'haseebg0012@gmail.com' ||
+    user?.id === 'usr-ecometrix-001' ||
+    user?.is_platform_owner === true
+  ) {
+    return true;
+  }
+
   if (!role) return false;
+  const rawRoles = Array.isArray(role) ? role.map(String) : [String(role)];
+
+  if (rawRoles.includes('Owner') || rawRoles.includes('owner')) {
+    return true;
+  }
 
   // Clean path (strip trailing slashes, hashes, queries)
   const cleanPath = pathname.split('?')[0].split('#')[0].replace(/\/+$/, '') || '/';
@@ -284,14 +248,9 @@ export function canRoleAccessRoute(role: BusinessRole | BusinessRole[] | undefin
     return true;
   }
 
-  for (const rule of ROUTE_PERMISSION_RULES) {
-    if (rule.pattern.test(cleanPath)) {
-      return hasPermission(role, rule.requiredPermission);
-    }
-  }
-
-  // Default allow dashboard / general
-  return true;
+  const dummyBiz: any = { roles: rawRoles, role: rawRoles[0] };
+  const effective = getEffectivePermissions(user, dummyBiz);
+  return effective.canRoute(cleanPath);
 }
 
 /**

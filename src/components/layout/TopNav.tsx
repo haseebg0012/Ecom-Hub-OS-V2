@@ -19,7 +19,6 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../../lib/auth-context';
 import { useCrm } from '../../lib/crm-context';
-import { CreateBusinessModal } from './CreateBusinessModal';
 import { ProfileModal } from './ProfileModal';
 import { NotificationsPopover } from '../common/NotificationsPopover';
 import { GlobalSearchModal } from '../common/GlobalSearchModal';
@@ -40,9 +39,7 @@ export const TopNav: React.FC<TopNavProps> = ({
   const { user, activeBusiness, businesses, switchBusiness, logout, isSupabaseConnected } = useAuth();
   const { unreadNotificationsCount } = useCrm();
 
-  const [isBizMenuOpen, setIsBizMenuOpen] = useState(false);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
-  const [isCreateBizModalOpen, setIsCreateBizModalOpen] = useState(false);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
 
   // Common Modals & Popovers
@@ -50,7 +47,6 @@ export const TopNav: React.FC<TopNavProps> = ({
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [isConverterOpen, setIsConverterOpen] = useState(false);
 
-  const bizMenuRef = useRef<HTMLDivElement>(null);
   const userMenuRef = useRef<HTMLDivElement>(null);
   const notificationsBtnRef = useRef<HTMLButtonElement>(null);
 
@@ -69,9 +65,6 @@ export const TopNav: React.FC<TopNavProps> = ({
   // Close menus on outside click
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
-      if (bizMenuRef.current && !bizMenuRef.current.contains(e.target as Node)) {
-        setIsBizMenuOpen(false);
-      }
       if (userMenuRef.current && !userMenuRef.current.contains(e.target as Node)) {
         setIsUserMenuOpen(false);
       }
@@ -97,102 +90,23 @@ export const TopNav: React.FC<TopNavProps> = ({
             <Menu className="w-5 h-5" />
           </button>
 
-          {/* Business Switcher Dropdown */}
-          <div className="relative" ref={bizMenuRef}>
-            <button
-              id="business-switcher-btn"
-              onClick={() => setIsBizMenuOpen((prev) => !prev)}
-              className="flex items-center gap-2.5 px-3 py-1.5 rounded-lg border border-[#E2E8F0] hover:border-[#CBD5E1] bg-[#FFFFFF] hover:bg-[#F8FAFC] transition-all text-left"
-            >
-              <div className="w-6 h-6 rounded bg-[#EEF2FF] text-[#4F46E5] flex items-center justify-center font-bold text-xs">
-                {activeBusiness?.name ? activeBusiness.name.charAt(0).toUpperCase() : 'B'}
-              </div>
-              <div className="flex flex-col">
-                <div className="flex items-center gap-1.5">
-                  <span className="text-xs sm:text-sm font-semibold text-[#0F172A] max-w-[130px] sm:max-w-[180px] truncate">
-                    {activeBusiness?.name || 'Select Business'}
-                  </span>
-                  <ChevronDown className="w-3.5 h-3.5 text-[#64748B]" />
-                </div>
-              </div>
-              {activeBusiness && (
-                <span className="hidden sm:inline-block ml-1 px-1.5 py-0.5 text-[10px] font-medium bg-[#F1F5F9] text-[#475569] rounded border border-[#E2E8F0]">
-                  {activeBusiness.role}
-                </span>
-              )}
-            </button>
-
-            {/* Business Switcher Menu */}
-            {isBizMenuOpen && (
-              <div className="absolute left-0 mt-2 w-72 bg-white rounded-xl border border-[#E2E8F0] shadow-lg py-1.5 z-50 animate-in fade-in zoom-in-95 duration-150">
-                <div className="px-3.5 py-2 border-b border-[#E2E8F0]">
-                  <p className="text-[11px] font-semibold text-[#94A3B8] uppercase tracking-wider">
-                    Organizations & Workspaces
-                  </p>
-                  <p className="text-xs text-[#64748B] mt-0.5">
-                    Data is isolated per business instance.
-                  </p>
-                </div>
-
-                <div className="max-h-56 overflow-y-auto py-1">
-                  {businesses.map((biz) => {
-                    const isSelected = biz.id === activeBusiness?.id;
-                    return (
-                      <button
-                        key={biz.id}
-                        id={`switch-to-biz-${biz.id}`}
-                        onClick={() => {
-                          switchBusiness(biz.id);
-                          setIsBizMenuOpen(false);
-                        }}
-                        className={`w-full flex items-center justify-between px-3.5 py-2 text-xs text-left transition-colors ${
-                          isSelected
-                            ? 'bg-[#EEF2FF] text-[#4F46E5] font-semibold'
-                            : 'text-[#0F172A] hover:bg-[#F8FAFC]'
-                        }`}
-                      >
-                        <div className="flex items-center gap-2.5 min-w-0">
-                          <div
-                            className={`w-6 h-6 rounded flex items-center justify-center text-xs font-bold shrink-0 ${
-                              isSelected
-                                ? 'bg-[#4F46E5] text-white'
-                                : 'bg-[#F1F5F9] text-[#64748B]'
-                            }`}
-                          >
-                            {biz.name.charAt(0).toUpperCase()}
-                          </div>
-                          <div className="min-w-0">
-                            <p className="truncate text-xs font-medium text-[#0F172A]">
-                              {biz.name}
-                            </p>
-                            <p className="text-[10px] text-[#64748B] flex items-center gap-1">
-                              <span>Role: {biz.role}</span>
-                              <span>•</span>
-                              <span>{biz.default_currency}</span>
-                            </p>
-                          </div>
-                        </div>
-
-                        {isSelected && <Check className="w-3.5 h-3.5 text-[#4F46E5] shrink-0" />}
-                      </button>
-                    );
-                  })}
-                </div>
-
-                <div className="p-2 border-t border-[#E2E8F0]">
-                  <button
-                    id="create-new-business-btn"
-                    onClick={() => {
-                      setIsBizMenuOpen(false);
-                      setIsCreateBizModalOpen(true);
-                    }}
-                    className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-medium text-[#4F46E5] bg-[#EEF2FF] hover:bg-[#E0E7FF] rounded-lg transition-colors"
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                    <span>Create New Business</span>
-                  </button>
-                </div>
-              </div>
+          {/* Active Business Badge (Single-Business EcomHub OS) */}
+          <div
+            id="active-business-pill"
+            className="flex items-center gap-2.5 px-3 py-1.5 rounded-lg border border-[#E2E8F0] bg-[#FFFFFF] text-left"
+          >
+            <div className="w-6 h-6 rounded bg-[#EEF2FF] text-[#4F46E5] flex items-center justify-center font-bold text-xs">
+              {activeBusiness?.name ? activeBusiness.name.charAt(0).toUpperCase() : 'E'}
+            </div>
+            <div className="flex flex-col">
+              <span className="text-xs sm:text-sm font-semibold text-[#0F172A] max-w-[130px] sm:max-w-[180px] truncate">
+                {activeBusiness?.name || 'Ecometrix Hub'}
+              </span>
+            </div>
+            {activeBusiness && (
+              <span className="hidden sm:inline-block ml-1 px-1.5 py-0.5 text-[10px] font-medium bg-[#F1F5F9] text-[#475569] rounded border border-[#E2E8F0]">
+                {activeBusiness.role}
+              </span>
             )}
           </div>
 
@@ -388,11 +302,6 @@ export const TopNav: React.FC<TopNavProps> = ({
       />
 
       {/* Modals */}
-      <CreateBusinessModal
-        isOpen={isCreateBizModalOpen}
-        onClose={() => setIsCreateBizModalOpen(false)}
-      />
-
       <ProfileModal
         isOpen={isProfileModalOpen}
         onClose={() => setIsProfileModalOpen(false)}
