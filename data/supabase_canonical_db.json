@@ -33,6 +33,22 @@
       "avatar_url": null,
       "created_at": "2025-01-01T00:00:00.000Z",
       "updated_at": "2026-09-30T18:26:31.522Z"
+    },
+    {
+      "id": "288b63df-c1df-44e7-8db1-9832b2355a72",
+      "email": "tahakhanzada@gmail.com",
+      "full_name": "Taha Khan",
+      "avatar_url": null,
+      "created_at": "2026-09-30T19:31:24.571Z",
+      "updated_at": "2026-09-30T19:31:24.571Z"
+    },
+    {
+      "id": "e505d9f3-cbe2-4a67-8333-252ae82323dc",
+      "email": "disposable.test.emp@gmail.com",
+      "full_name": "Disposable Test Employee",
+      "avatar_url": null,
+      "created_at": "2026-09-30T20:37:24.548Z",
+      "updated_at": "2026-09-30T20:37:24.548Z"
     }
   ],
   "business_members": [
@@ -49,6 +65,20 @@
       "business_id": "00000000-0000-4000-8000-000000000001",
       "role": "Owner",
       "created_at": "2025-01-01T00:00:00.000Z"
+    },
+    {
+      "id": "bm-taha-001",
+      "user_id": "288b63df-c1df-44e7-8db1-9832b2355a72",
+      "business_id": "00000000-0000-4000-8000-000000000001",
+      "role": "Sales",
+      "created_at": "2026-09-30T19:31:24.571Z"
+    },
+    {
+      "id": "bm-e505d9f3-cbe2-4a67-8333-252ae82323dc",
+      "user_id": "e505d9f3-cbe2-4a67-8333-252ae82323dc",
+      "business_id": "00000000-0000-4000-8000-000000000001",
+      "role": "Sales Representative",
+      "created_at": "2026-09-30T20:37:24.548Z"
     }
   ],
   "business_member_roles": [
@@ -67,6 +97,23 @@
       "business_id": "00000000-0000-4000-8000-000000000001",
       "role_key": "Owner",
       "created_at": "2025-01-01T00:00:00.000Z"
+    },
+    {
+      "id": "bmr-taha-001",
+      "business_member_id": "bm-taha-001",
+      "user_id": "288b63df-c1df-44e7-8db1-9832b2355a72",
+      "business_id": "00000000-0000-4000-8000-000000000001",
+      "role_key": "sales_representative",
+      "created_at": "2026-09-30T19:31:24.571Z"
+    },
+    {
+      "id": "bmr-1790800644549-yw3bj",
+      "business_member_id": "bm-e505d9f3-cbe2-4a67-8333-252ae82323dc",
+      "user_id": "e505d9f3-cbe2-4a67-8333-252ae82323dc",
+      "business_id": "00000000-0000-4000-8000-000000000001",
+      "role_key": "sales_representative",
+      "created_at": "2026-09-30T20:37:24.549Z",
+      "created_by": "4c2aa045-cdfb-4d70-955c-4de901dc224a"
     }
   ],
   "auth_users": [
@@ -84,6 +131,44 @@
       },
       "created_at": "2025-01-01T00:00:00.000Z",
       "email_confirmed_at": "2025-01-01T00:00:00.000Z"
+    },
+    {
+      "id": "288b63df-c1df-44e7-8db1-9832b2355a72",
+      "email": "tahakhanzada@gmail.com",
+      "password": "Password123!",
+      "user_metadata": {
+        "full_name": "Taha Khan",
+        "role": "Sales Representative",
+        "roles": [
+          "Sales Representative"
+        ],
+        "department": "Sales",
+        "job_title": "Sales Representative",
+        "business_id": "00000000-0000-4000-8000-000000000001"
+      },
+      "app_metadata": {
+        "role": "Sales Representative"
+      },
+      "created_at": "2026-09-30T19:31:24.571Z",
+      "email_confirmed_at": "2026-09-30T19:31:24.571Z"
+    },
+    {
+      "id": "e505d9f3-cbe2-4a67-8333-252ae82323dc",
+      "email": "disposable.test.emp@gmail.com",
+      "password": "TestPassword123!",
+      "user_metadata": {
+        "full_name": "Disposable Test Employee",
+        "role": "Sales Representative",
+        "roles": [
+          "Sales Representative"
+        ],
+        "department": "Sales",
+        "job_title": "Test Representative",
+        "business_id": "00000000-0000-4000-8000-000000000001"
+      },
+      "app_metadata": {},
+      "created_at": "2026-09-30T20:37:24.547Z",
+      "email_confirmed_at": "2026-09-30T20:37:24.547Z"
     }
   ],
   "role_permissions": [
@@ -3139,6 +3224,58 @@
       "is_active": true,
       "created_at": "2025-01-01T00:00:00.000Z",
       "updated_at": "2026-09-30T18:26:31.522Z"
+    },
+    {
+      "id": "acc-00000000-0000-4000-8000-000000000001-001",
+      "business_id": "00000000-0000-4000-8000-000000000001",
+      "name": "Meezan Bank - Corporate PKR",
+      "type": "Bank",
+      "currency": "PKR",
+      "opening_balance": 0,
+      "current_balance": 0,
+      "description": "Primary corporate operational checking account for local payroll and vendor payments.",
+      "is_active": true,
+      "created_at": "2026-09-30T20:37:10.762Z",
+      "updated_at": "2026-09-30T20:37:10.762Z"
+    },
+    {
+      "id": "acc-00000000-0000-4000-8000-000000000001-002",
+      "business_id": "00000000-0000-4000-8000-000000000001",
+      "name": "Standard Chartered - USD Inward",
+      "type": "Bank",
+      "currency": "USD",
+      "opening_balance": 0,
+      "current_balance": 0,
+      "description": "Foreign currency account receiving overseas client retainer wire transfers.",
+      "is_active": true,
+      "created_at": "2026-09-30T20:37:10.762Z",
+      "updated_at": "2026-09-30T20:37:10.762Z"
+    },
+    {
+      "id": "acc-00000000-0000-4000-8000-000000000001-003",
+      "business_id": "00000000-0000-4000-8000-000000000001",
+      "name": "Wise Business Global Multi-Currency",
+      "type": "Digital Wallet",
+      "currency": "USD",
+      "opening_balance": 0,
+      "current_balance": 0,
+      "description": "Used for paying global SaaS tools and contractor disbursements.",
+      "is_active": true,
+      "created_at": "2026-09-30T20:37:10.762Z",
+      "updated_at": "2026-09-30T20:37:10.762Z"
+    },
+    {
+      "id": "acc-00000000-0000-4000-8000-000000000001-004",
+      "business_id": "00000000-0000-4000-8000-000000000001",
+      "name": "Office Petty Cash Vault",
+      "type": "Cash",
+      "currency": "PKR",
+      "opening_balance": 0,
+      "current_balance": 0,
+      "description": "Daily office supplies, refreshments, courier delivery charges, and local errands.",
+      "is_active": true,
+      "created_at": "2026-09-30T20:37:10.762Z",
+      "updated_at": "2026-09-30T20:37:10.762Z"
     }
   ],
   "financial_categories": [
@@ -3537,6 +3674,204 @@
       "is_active": true,
       "created_at": "2026-09-30T07:55:46.091Z",
       "updated_at": "2026-09-30T07:55:46.091Z"
+    },
+    {
+      "id": "cat-00000000-0000-4000-8000-000000000001-001",
+      "business_id": "00000000-0000-4000-8000-000000000001",
+      "name": "Client Payment",
+      "type": "Income",
+      "color": "#10B981",
+      "is_default": true,
+      "is_active": true,
+      "created_at": "2026-09-30T20:37:10.762Z",
+      "updated_at": "2026-09-30T20:37:10.762Z"
+    },
+    {
+      "id": "cat-00000000-0000-4000-8000-000000000001-002",
+      "business_id": "00000000-0000-4000-8000-000000000001",
+      "name": "Service Retainer",
+      "type": "Income",
+      "color": "#059669",
+      "is_default": true,
+      "is_active": true,
+      "created_at": "2026-09-30T20:37:10.762Z",
+      "updated_at": "2026-09-30T20:37:10.762Z"
+    },
+    {
+      "id": "cat-00000000-0000-4000-8000-000000000001-003",
+      "business_id": "00000000-0000-4000-8000-000000000001",
+      "name": "Consulting & Architecture",
+      "type": "Income",
+      "color": "#34D399",
+      "is_default": true,
+      "is_active": true,
+      "created_at": "2026-09-30T20:37:10.762Z",
+      "updated_at": "2026-09-30T20:37:10.762Z"
+    },
+    {
+      "id": "cat-00000000-0000-4000-8000-000000000001-004",
+      "business_id": "00000000-0000-4000-8000-000000000001",
+      "name": "Other Income",
+      "type": "Income",
+      "color": "#6EE7B7",
+      "is_default": true,
+      "is_active": true,
+      "created_at": "2026-09-30T20:37:10.762Z",
+      "updated_at": "2026-09-30T20:37:10.762Z"
+    },
+    {
+      "id": "cat-00000000-0000-4000-8000-000000000001-005",
+      "business_id": "00000000-0000-4000-8000-000000000001",
+      "name": "Software & Subscriptions",
+      "type": "Expense",
+      "color": "#6366F1",
+      "is_default": true,
+      "is_active": true,
+      "created_at": "2026-09-30T20:37:10.762Z",
+      "updated_at": "2026-09-30T20:37:10.762Z"
+    },
+    {
+      "id": "cat-00000000-0000-4000-8000-000000000001-006",
+      "business_id": "00000000-0000-4000-8000-000000000001",
+      "name": "Cloud Hosting & Servers",
+      "type": "Expense",
+      "color": "#8B5CF6",
+      "is_default": true,
+      "is_active": true,
+      "created_at": "2026-09-30T20:37:10.762Z",
+      "updated_at": "2026-09-30T20:37:10.762Z"
+    },
+    {
+      "id": "cat-00000000-0000-4000-8000-000000000001-007",
+      "business_id": "00000000-0000-4000-8000-000000000001",
+      "name": "Salaries & Payroll",
+      "type": "Expense",
+      "color": "#EF4444",
+      "is_default": true,
+      "is_active": true,
+      "created_at": "2026-09-30T20:37:10.762Z",
+      "updated_at": "2026-09-30T20:37:10.762Z"
+    },
+    {
+      "id": "cat-00000000-0000-4000-8000-000000000001-008",
+      "business_id": "00000000-0000-4000-8000-000000000001",
+      "name": "Freelancers & Contractors",
+      "type": "Expense",
+      "color": "#F97316",
+      "is_default": true,
+      "is_active": true,
+      "created_at": "2026-09-30T20:37:10.762Z",
+      "updated_at": "2026-09-30T20:37:10.762Z"
+    },
+    {
+      "id": "cat-00000000-0000-4000-8000-000000000001-009",
+      "business_id": "00000000-0000-4000-8000-000000000001",
+      "name": "Office Rent & Facilities",
+      "type": "Expense",
+      "color": "#EC4899",
+      "is_default": true,
+      "is_active": true,
+      "created_at": "2026-09-30T20:37:10.762Z",
+      "updated_at": "2026-09-30T20:37:10.762Z"
+    },
+    {
+      "id": "cat-00000000-0000-4000-8000-000000000001-010",
+      "business_id": "00000000-0000-4000-8000-000000000001",
+      "name": "Internet & Communications",
+      "type": "Expense",
+      "color": "#3B82F6",
+      "is_default": true,
+      "is_active": true,
+      "created_at": "2026-09-30T20:37:10.762Z",
+      "updated_at": "2026-09-30T20:37:10.762Z"
+    },
+    {
+      "id": "cat-00000000-0000-4000-8000-000000000001-011",
+      "business_id": "00000000-0000-4000-8000-000000000001",
+      "name": "Advertising & Marketing",
+      "type": "Expense",
+      "color": "#F59E0B",
+      "is_default": true,
+      "is_active": true,
+      "created_at": "2026-09-30T20:37:10.762Z",
+      "updated_at": "2026-09-30T20:37:10.762Z"
+    },
+    {
+      "id": "cat-00000000-0000-4000-8000-000000000001-012",
+      "business_id": "00000000-0000-4000-8000-000000000001",
+      "name": "Equipment & Maintenance",
+      "type": "Expense",
+      "color": "#64748B",
+      "is_default": true,
+      "is_active": true,
+      "created_at": "2026-09-30T20:37:10.762Z",
+      "updated_at": "2026-09-30T20:37:10.762Z"
+    },
+    {
+      "id": "cat-00000000-0000-4000-8000-000000000001-013",
+      "business_id": "00000000-0000-4000-8000-000000000001",
+      "name": "Taxes & Compliance",
+      "type": "Expense",
+      "color": "#94A3B8",
+      "is_default": true,
+      "is_active": true,
+      "created_at": "2026-09-30T20:37:10.762Z",
+      "updated_at": "2026-09-30T20:37:10.762Z"
+    },
+    {
+      "id": "cat-00000000-0000-4000-8000-000000000001-014",
+      "business_id": "00000000-0000-4000-8000-000000000001",
+      "name": "Utilities & Power",
+      "type": "Expense",
+      "color": "#A855F7",
+      "is_default": true,
+      "is_active": true,
+      "created_at": "2026-09-30T20:37:10.762Z",
+      "updated_at": "2026-09-30T20:37:10.762Z"
+    },
+    {
+      "id": "cat-00000000-0000-4000-8000-000000000001-015",
+      "business_id": "00000000-0000-4000-8000-000000000001",
+      "name": "Hardware & Workstations",
+      "type": "Investment",
+      "color": "#0EA5E9",
+      "is_default": true,
+      "is_active": true,
+      "created_at": "2026-09-30T20:37:10.762Z",
+      "updated_at": "2026-09-30T20:37:10.762Z"
+    },
+    {
+      "id": "cat-00000000-0000-4000-8000-000000000001-016",
+      "business_id": "00000000-0000-4000-8000-000000000001",
+      "name": "Studio & Video Equipment",
+      "type": "Investment",
+      "color": "#14B8A6",
+      "is_default": true,
+      "is_active": true,
+      "created_at": "2026-09-30T20:37:10.762Z",
+      "updated_at": "2026-09-30T20:37:10.762Z"
+    },
+    {
+      "id": "cat-00000000-0000-4000-8000-000000000001-017",
+      "business_id": "00000000-0000-4000-8000-000000000001",
+      "name": "Strategic Marketing Capital",
+      "type": "Investment",
+      "color": "#84CC16",
+      "is_default": true,
+      "is_active": true,
+      "created_at": "2026-09-30T20:37:10.762Z",
+      "updated_at": "2026-09-30T20:37:10.762Z"
+    },
+    {
+      "id": "cat-00000000-0000-4000-8000-000000000001-018",
+      "business_id": "00000000-0000-4000-8000-000000000001",
+      "name": "Business Expansion",
+      "type": "Investment",
+      "color": "#EAB308",
+      "is_default": true,
+      "is_active": true,
+      "created_at": "2026-09-30T20:37:10.762Z",
+      "updated_at": "2026-09-30T20:37:10.762Z"
     }
   ],
   "financial_settings": [
@@ -3569,6 +3904,21 @@
       "default_account_id": "acc-biz-acme-002-001",
       "financial_year_start": "07-01",
       "updated_at": "2026-09-30T07:55:46.091Z"
+    },
+    {
+      "id": "set-00000000-0000-4000-8000-000000000001-001",
+      "business_id": "00000000-0000-4000-8000-000000000001",
+      "base_currency": "PKR",
+      "default_invoice_currency": "USD",
+      "default_payment_terms": "Net 15",
+      "default_tax_rate": 0,
+      "invoice_prefix": "INV-",
+      "next_invoice_number": 1,
+      "payment_prefix": "PAY-",
+      "next_payment_number": 1,
+      "default_account_id": "acc-00000000-0000-4000-8000-000000000001-001",
+      "financial_year_start": "07-01",
+      "updated_at": "2026-09-30T20:37:10.762Z"
     }
   ],
   "income_records": [],

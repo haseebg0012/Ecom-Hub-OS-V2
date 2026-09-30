@@ -59,6 +59,7 @@ const LOCAL_STORAGE_BUSINESSES_KEY = 'ecomhub_businesses';
 const LOCAL_STORAGE_MEMBERS_KEY = 'ecomhub_members';
 const LOCAL_STORAGE_PROFILES_KEY = 'ecomhub_profiles';
 const LOCAL_STORAGE_ACTIVE_BIZ_KEY = 'ecomhub_active_business_id';
+export const CANONICAL_BUSINESS_ID = '00000000-0000-4000-8000-000000000001';
 
 // Initial seed data adhering to multi-tenant specifications
 const INITIAL_DEMO_USER: Profile = {
@@ -72,7 +73,7 @@ const INITIAL_DEMO_USER: Profile = {
 
 const INITIAL_DEMO_BUSINESSES: Business[] = [
   {
-    id: 'biz-ecometrix-001',
+    id: CANONICAL_BUSINESS_ID,
     name: 'Ecometrix Hub',
     logo: null,
     email: 'ecometrixhub@gmail.com',
@@ -101,7 +102,7 @@ const INITIAL_DEMO_MEMBERS: BusinessMember[] = [
   {
     id: 'mem-001',
     user_id: 'usr-ecometrix-001',
-    business_id: 'biz-ecometrix-001',
+    business_id: CANONICAL_BUSINESS_ID,
     role: 'Owner',
     roles: ['Owner', 'Admin'],
     created_at: new Date('2025-01-15T09:00:00Z').toISOString(),
@@ -356,7 +357,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (localUser && localUser.email) {
           let userRole: BusinessRole = 'Employee';
           let userRoles: BusinessRole[] = ['Employee'];
-          let bizId = localStorage.getItem(LOCAL_STORAGE_ACTIVE_BIZ_KEY) || 'biz-ecometrix-001';
+          let bizId = localStorage.getItem(LOCAL_STORAGE_ACTIVE_BIZ_KEY) || CANONICAL_BUSINESS_ID;
           let bizName = 'Ecometrix Hub';
 
           let hasExplicitEmpRole = false;
@@ -667,7 +668,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       try {
         const apiRes = await fetch('/api/employees', {
           headers: {
-            'x-business-id': 'biz-ecometrix-001',
+            'x-business-id': CANONICAL_BUSINESS_ID,
             'x-user-role': 'Owner',
           }
         });
@@ -693,7 +694,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       try {
         const apiRes = await fetch('/api/employees', {
           headers: {
-            'x-business-id': 'biz-ecometrix-001',
+            'x-business-id': CANONICAL_BUSINESS_ID,
             'x-user-role': 'Owner',
           }
         });
@@ -770,7 +771,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setUser(empProfile);
         setIsEmailVerified(true);
         const biz: BusinessWithRole = {
-          id: foundEmp.business_id || 'biz-ecometrix-001',
+          id: foundEmp.business_id || CANONICAL_BUSINESS_ID,
           name: 'Ecometrix Hub',
           logo: null,
           email: cleanEmail,
@@ -825,7 +826,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setUser(adminProfile);
       setIsEmailVerified(true);
       const biz: BusinessWithRole = {
-        id: 'biz-ecometrix-001',
+        id: CANONICAL_BUSINESS_ID,
         name: 'Ecometrix Hub',
         logo: null,
         email: cleanEmail,
@@ -1646,7 +1647,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setIsEmailVerified(true);
     const demoBusinesses: BusinessWithRole[] = [
       {
-        id: 'biz-ecometrix-001',
+        id: CANONICAL_BUSINESS_ID,
         name: 'Ecometrix Hub',
         logo: null,
         email: 'ecometrixhub@gmail.com',
@@ -1678,7 +1679,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       {
         id: 'mem-001',
         user_id: demoProfile.id,
-        business_id: 'biz-ecometrix-001',
+        business_id: CANONICAL_BUSINESS_ID,
         role: 'Owner',
         created_at: new Date('2025-01-15T09:00:00Z').toISOString(),
         profile: demoProfile,
@@ -1686,7 +1687,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     ];
     setMembers(demoMembers);
     localStorage.setItem(LOCAL_STORAGE_SESSION_KEY, JSON.stringify(demoProfile));
-    localStorage.setItem(LOCAL_STORAGE_ACTIVE_BIZ_KEY, 'biz-ecometrix-001');
+    localStorage.setItem(LOCAL_STORAGE_ACTIVE_BIZ_KEY, CANONICAL_BUSINESS_ID);
     setIsLoading(false);
   };
 

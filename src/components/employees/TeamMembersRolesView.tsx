@@ -34,6 +34,8 @@ import { usePermissions } from '../../lib/use-permissions';
 import { UnauthorizedView } from '../unauthorized/UnauthorizedView';
 import { resolveRoleDefinition } from '../../lib/role-normalizer';
 
+const CANONICAL_BIZ_ID = '00000000-0000-4000-8000-000000000001';
+
 interface RoleConfigItem {
   key: string;
   label: string;
@@ -270,7 +272,7 @@ export const TeamMembersRolesView: React.FC = () => {
       const client = getSupabaseClient();
       let dbMembers: any[] = [];
       let dbRoleRows: any[] = [];
-      const currentBizId = activeBusiness?.id || 'biz-ecometrix-001';
+      const currentBizId = activeBusiness?.id || CANONICAL_BIZ_ID;
 
       if (client && currentBizId) {
         try {
@@ -532,7 +534,7 @@ export const TeamMembersRolesView: React.FC = () => {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer user:${user?.id || 'usr-ecometrix-001'}`,
-          'x-business-id': activeBusiness?.id || 'biz-ecometrix-001',
+          'x-business-id': activeBusiness?.id || CANONICAL_BIZ_ID,
           'x-user-id': user?.id || 'usr-ecometrix-001',
           'x-user-role': activeBusiness?.role || 'Owner',
         },
@@ -623,7 +625,7 @@ export const TeamMembersRolesView: React.FC = () => {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer user:${user?.id || 'usr-ecometrix-001'}`,
-          'x-business-id': activeBusiness?.id || 'biz-ecometrix-001',
+          'x-business-id': activeBusiness?.id || CANONICAL_BIZ_ID,
           'x-user-id': user?.id || 'usr-ecometrix-001',
           'x-user-role': activeBusiness?.role || 'Owner',
         },
@@ -725,7 +727,7 @@ export const TeamMembersRolesView: React.FC = () => {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer user:${user?.id || 'usr-ecometrix-001'}`,
-          'x-business-id': activeBusiness?.id || 'biz-ecometrix-001',
+          'x-business-id': activeBusiness?.id || CANONICAL_BIZ_ID,
           'x-user-id': user?.id || 'usr-ecometrix-001',
           'x-user-role': activeBusiness?.role || 'Owner',
         },
@@ -737,7 +739,7 @@ export const TeamMembersRolesView: React.FC = () => {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer user:${user?.id || 'usr-ecometrix-001'}`,
-          'x-business-id': activeBusiness?.id || 'biz-ecometrix-001',
+          'x-business-id': activeBusiness?.id || CANONICAL_BIZ_ID,
           'x-user-id': user?.id || 'usr-ecometrix-001',
           'x-user-role': activeBusiness?.role || 'Owner',
         },
@@ -805,7 +807,7 @@ export const TeamMembersRolesView: React.FC = () => {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer user:${user?.id || 'usr-ecometrix-001'}`,
-          'x-business-id': activeBusiness?.id || 'biz-ecometrix-001',
+          'x-business-id': activeBusiness?.id || CANONICAL_BIZ_ID,
           'x-user-id': user?.id || 'usr-ecometrix-001',
           'x-user-role': activeBusiness?.role || 'Owner',
         },
@@ -861,7 +863,7 @@ export const TeamMembersRolesView: React.FC = () => {
 
         await client.from('business_members').upsert({
           user_id: authUserId,
-          business_id: activeBusiness?.id || 'biz-ecometrix-001',
+          business_id: activeBusiness?.id || CANONICAL_BIZ_ID,
           role: validDbRole
         }, { onConflict: 'user_id,business_id' });
 
@@ -869,7 +871,7 @@ export const TeamMembersRolesView: React.FC = () => {
           try {
             await client.from('business_member_roles').insert({
               user_id: authUserId,
-              business_id: activeBusiness?.id || 'biz-ecometrix-001',
+              business_id: activeBusiness?.id || CANONICAL_BIZ_ID,
               role_key: rKey,
               created_by: user?.id || 'usr-ecometrix-001',
             });
@@ -883,7 +885,7 @@ export const TeamMembersRolesView: React.FC = () => {
     // 3. Construct local employee record with authoritative Auth UUID
     const newEmp = {
       id: `emp-${Date.now()}`,
-      business_id: activeBusiness?.id || 'biz-ecometrix-001',
+      business_id: activeBusiness?.id || CANONICAL_BIZ_ID,
       user_id: authUserId,
       name: addForm.name.trim(),
       email: cleanEmail,
@@ -1026,7 +1028,7 @@ export const TeamMembersRolesView: React.FC = () => {
             : 'Employee';
           await client.from('business_members').update({
             role: validDbRole
-          }).eq('user_id', editingEmployee.user_id).eq('business_id', activeBusiness?.id || 'biz-ecometrix-001');
+          }).eq('user_id', editingEmployee.user_id).eq('business_id', activeBusiness?.id || CANONICAL_BIZ_ID);
 
           // Reconcile multi-role assignments in business_member_roles:
           // Insert only missing role assignments, delete only removed role assignments
@@ -1035,7 +1037,7 @@ export const TeamMembersRolesView: React.FC = () => {
               .from('business_member_roles')
               .select('id, role_key')
               .eq('user_id', editingEmployee.user_id)
-              .eq('business_id', activeBusiness?.id || 'biz-ecometrix-001');
+              .eq('business_id', activeBusiness?.id || CANONICAL_BIZ_ID);
 
             const curList = currentBmr || [];
             const curKeysLower = curList.map((r: any) => (r.role_key || '').toLowerCase());
@@ -1053,7 +1055,7 @@ export const TeamMembersRolesView: React.FC = () => {
               if (!curKeysLower.includes(rKey.toLowerCase())) {
                 await client.from('business_member_roles').insert({
                   user_id: editingEmployee.user_id,
-                  business_id: activeBusiness?.id || 'biz-ecometrix-001',
+                  business_id: activeBusiness?.id || CANONICAL_BIZ_ID,
                   role_key: rKey,
                   created_by: user?.id || 'usr-ecometrix-001',
                 });
@@ -1075,7 +1077,7 @@ export const TeamMembersRolesView: React.FC = () => {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer user:${user?.id || 'usr-ecometrix-001'}`,
-          'x-business-id': activeBusiness?.id || 'biz-ecometrix-001',
+          'x-business-id': activeBusiness?.id || CANONICAL_BIZ_ID,
           'x-user-id': user?.id || 'usr-ecometrix-001',
           'x-user-role': activeBusiness?.role || 'Owner',
         },
@@ -1169,8 +1171,8 @@ export const TeamMembersRolesView: React.FC = () => {
     try {
       const client = getSupabaseClient();
       if (client && empToDelete?.user_id) {
-        await client.from('business_member_roles').delete().eq('user_id', empToDelete.user_id).eq('business_id', activeBusiness?.id || 'biz-ecometrix-001');
-        await client.from('business_members').delete().eq('user_id', empToDelete.user_id).eq('business_id', activeBusiness?.id || 'biz-ecometrix-001');
+        await client.from('business_member_roles').delete().eq('user_id', empToDelete.user_id).eq('business_id', activeBusiness?.id || CANONICAL_BIZ_ID);
+        await client.from('business_members').delete().eq('user_id', empToDelete.user_id).eq('business_id', activeBusiness?.id || CANONICAL_BIZ_ID);
       }
     } catch (err) {
       console.warn('[Supabase Delete Employee Notice]:', err);
@@ -1182,7 +1184,7 @@ export const TeamMembersRolesView: React.FC = () => {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer user:${user?.id || 'usr-ecometrix-001'}`,
-          'x-business-id': activeBusiness?.id || 'biz-ecometrix-001',
+          'x-business-id': activeBusiness?.id || CANONICAL_BIZ_ID,
           'x-user-id': user?.id || 'usr-ecometrix-001',
           'x-user-role': activeBusiness?.role || 'Owner',
         }

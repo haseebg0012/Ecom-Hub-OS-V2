@@ -159,6 +159,15 @@ interface AuthenticatedRequest extends Request {
   isPlatformOwner?: boolean;
 }
 
+export const CANONICAL_BUSINESS_UUID = '00000000-0000-4000-8000-000000000001';
+
+export function normalizeBusinessId(id?: string | null): string {
+  if (!id || id === 'biz-ecometrix-001') {
+    return CANONICAL_BUSINESS_UUID;
+  }
+  return id;
+}
+
 // In-Memory Seed / Demo Database for Server-Side Fallback & Instant Multi-Tenant Verification
 // Keeps state in sync when Supabase is running or in local container demo mode
 interface MemberRecord {
@@ -168,7 +177,7 @@ interface MemberRecord {
 }
 
 const DEMO_MEMBERS: MemberRecord[] = [
-  { user_id: 'usr-ecometrix-001', business_id: 'biz-ecometrix-001', role: 'Owner' },
+  { user_id: 'usr-ecometrix-001', business_id: CANONICAL_BUSINESS_UUID, role: 'Owner' },
 ];
 
 // Helper to look up member role
@@ -257,7 +266,7 @@ async function requireServerAuth(req: AuthenticatedRequest, res: Response, next:
   }
 
   const customRole = req.headers['x-user-role'] as BusinessRole;
-  const activeBusinessId = (req.headers['x-business-id'] as string) || 'biz-ecometrix-001';
+  const activeBusinessId = normalizeBusinessId(req.headers['x-business-id'] as string);
   let role: BusinessRole | null = customRole || null;
   if (!role) {
     role = lookupUserRole(req.userId, activeBusinessId) || 'Owner';
@@ -3570,6 +3579,41 @@ function getSupabaseAdmin() {
   }
 }
 
+async function resolveCanonicalBusinessUuid(adminClient?: any, requestedBizId?: string): Promise<string> {
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if (requestedBizId && uuidRegex.test(requestedBizId)) {
+    return requestedBizId;
+  }
+
+  if (adminClient) {
+    try {
+      const { data: member } = await adminClient.from('business_members').select('business_id').limit(1).maybeSingle();
+      if (member?.business_id && uuidRegex.test(member.business_id)) {
+        return member.business_id;
+      }
+      const { data: biz } = await adminClient.from('businesses').select('id').limit(1).maybeSingle();
+      if (biz?.id && uuidRegex.test(biz.id)) {
+        return biz.id;
+      }
+    } catch (e) {
+      console.warn('[Business UUID Resolution Warning]:', e);
+    }
+  }
+
+  return CANONICAL_BUSINESS_UUID;
+}
+
+function resolveDbRole(roleStr: string): 'Owner' | 'Admin' | 'Manager' | 'Finance' | 'Sales' | 'Employee' | 'Viewer' {
+  const lower = (roleStr || '').toLowerCase();
+  if (lower.includes('owner')) return 'Owner';
+  if (lower.includes('admin')) return 'Admin';
+  if (lower.includes('manager')) return 'Manager';
+  if (lower.includes('finance')) return 'Finance';
+  if (lower.includes('sale') || lower.includes('caller') || lower.includes('lead')) return 'Sales';
+  if (lower.includes('viewer')) return 'Viewer';
+  return 'Employee';
+}
+
 /**
  * Resolves the public application URL for redirects and callbacks.
  * Checks environment configuration (APP_URL)
@@ -3854,11 +3898,14 @@ app.post(
         return;
       }
 
+      const adminClient = getSupabaseAdmin();
+      const rawBizId = req.activeBusinessId || (req.headers['x-business-id'] as string) || '';
+      const targetBizUuid = await resolveCanonicalBusinessUuid(adminClient, rawBizId);
+
       const db = loadDatabase();
-      const activeBizId = req.activeBusinessId || 'biz-ecometrix-001';
 
       const existingMem = (db.business_members || []).find((m) => {
-        if (m.business_id !== activeBizId) return false;
+        if (m.business_id !== targetBizUuid && m.business_id !== rawBizId) return false;
         const prof = (db.profiles || []).find((p) => p.id === m.user_id);
         return prof?.email.toLowerCase() === emailTrim;
       });
@@ -3873,69 +3920,118 @@ app.post(
         ? (roles.includes(primaryRole) ? roles : [primaryRole, ...roles])
         : [primaryRole];
       const empPassword = (password || temp_password || 'Admin1234!').trim();
-      let authUserId = user_id || (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `usr-${Date.now()}`);
+      let authUserId = user_id || '';
+      let isNewAuthUser = false;
 
-      // 1. If remote adminClient is available, create Supabase Auth user FIRST
-      const adminClient = getSupabaseAdmin();
+      // 1. If remote adminClient is available, authenticate or reuse Supabase Auth user
       if (adminClient) {
         try {
-          const { data: createdAuth, error: authErr } = await adminClient.auth.admin.createUser({
-            email: emailTrim,
-            password: empPassword,
-            email_confirm: true,
-            user_metadata: {
-              full_name: rawFullName,
-              role: primaryRole,
-              roles: assignedRoles,
-              department: department || 'Operations',
-              job_title: job_title || 'Team Member',
-              business_id: activeBizId,
+          const { data: existingUserList } = await adminClient.auth.admin.listUsers();
+          const existingAuth = (existingUserList?.users as any[])?.find(
+            (u: any) => u.email?.toLowerCase() === emailTrim
+          );
+
+          if (existingAuth) {
+            authUserId = existingAuth.id;
+            await adminClient.auth.admin.updateUserById(authUserId, {
+              password: empPassword,
+              email_confirm: true,
+              user_metadata: {
+                full_name: rawFullName,
+                role: primaryRole,
+                roles: assignedRoles,
+                department: department || 'Operations',
+                job_title: job_title || 'Team Member',
+                business_id: targetBizUuid,
+              },
+            });
+          } else {
+            const { data: createdAuth, error: authErr } = await adminClient.auth.admin.createUser({
+              email: emailTrim,
+              password: empPassword,
+              email_confirm: true,
+              user_metadata: {
+                full_name: rawFullName,
+                role: primaryRole,
+                roles: assignedRoles,
+                department: department || 'Operations',
+                job_title: job_title || 'Team Member',
+                business_id: targetBizUuid,
+              },
+            });
+
+            if (authErr) {
+              console.error('[Remote Supabase Auth Create User Error]:', authErr.message);
+              res.status(400).json({ error: `Failed to create authentication user in Supabase: ${authErr.message}` });
+              return;
             }
-          });
 
-          if (authErr) {
-            console.error('[Remote Supabase Auth Create User Error]:', authErr.message);
-            res.status(500).json({ error: `Failed to create authentication user in Supabase: ${authErr.message}` });
-            return;
+            if (createdAuth?.user?.id) {
+              authUserId = createdAuth.user.id;
+              isNewAuthUser = true;
+            }
           }
+        } catch (authException: any) {
+          console.error('[Remote Supabase Auth Exception]:', authException);
+          res.status(500).json({ error: `Authentication provider exception: ${authException?.message || 'Unknown'}` });
+          return;
+        }
 
-          if (createdAuth?.user?.id) {
-            authUserId = createdAuth.user.id;
-          }
-
-          // Upsert in remote Supabase tables using authoritative Auth UUID
-          await adminClient.from('profiles').upsert({
+        // Downstream Relational Setup with Rollback Safety
+        try {
+          // A. Upsert profile
+          const { error: profErr } = await adminClient.from('profiles').upsert({
             id: authUserId,
             email: emailTrim,
             full_name: rawFullName,
-            updated_at: new Date().toISOString()
+            updated_at: new Date().toISOString(),
           }, { onConflict: 'id' });
+          if (profErr) throw new Error(`Profile synchronization failed: ${profErr.message}`);
 
-          const dbValidRole = ['Owner', 'Admin', 'Manager', 'Finance', 'Sales', 'Viewer'].includes(primaryRole)
-            ? primaryRole
-            : 'Employee';
-          await adminClient.from('business_members').upsert({
+          // B. Upsert business_members using valid targetBizUuid
+          const dbValidRole = resolveDbRole(primaryRole);
+          const { error: bmErr } = await adminClient.from('business_members').upsert({
             user_id: authUserId,
-            business_id: activeBizId,
-            role: dbValidRole
+            business_id: targetBizUuid,
+            role: dbValidRole,
           }, { onConflict: 'user_id,business_id' });
+          if (bmErr) throw new Error(`Business membership synchronization failed: ${bmErr.message}`);
 
-          for (const rKey of assignedRoles) {
-            await adminClient.from('business_member_roles').upsert({
-              user_id: authUserId,
-              business_id: activeBizId,
-              role_key: rKey,
-              created_by: req.userId,
-            });
+          // C. Attempt business_member_roles if table is available
+          try {
+            for (const rKey of assignedRoles) {
+              const canonicalKey = rKey.toLowerCase().replace(/\s+/g, '_');
+              await adminClient.from('business_member_roles').upsert({
+                user_id: authUserId,
+                business_id: targetBizUuid,
+                role_key: canonicalKey,
+                created_by: req.userId,
+              });
+            }
+          } catch (rErr) {
+            console.warn('[business_member_roles non-fatal notice]:', rErr);
           }
-        } catch (adminErr: any) {
-          console.error('[Remote Supabase Admin Create Employee Error]:', adminErr);
-          res.status(500).json({ error: `Supabase employee provisioning error: ${adminErr?.message || 'Unknown error'}` });
+        } catch (relationalErr: any) {
+          console.error('[Remote Supabase Relational Error]:', relationalErr);
+          // Rollback newly created Auth user if downstream write fails
+          if (isNewAuthUser && authUserId) {
+            try {
+              await adminClient.auth.admin.deleteUser(authUserId);
+              console.log(`Rolled back newly-created auth user ${authUserId} after relational error.`);
+            } catch (delErr) {
+              console.error('Failed to rollback auth user:', delErr);
+            }
+          }
+          res.status(500).json({ error: `Supabase employee provisioning error: ${relationalErr?.message || 'Unknown error'}` });
           return;
         }
       }
 
-      // 2. Synchronize canonical local store with same authoritative Auth UUID
+      if (!authUserId) {
+        authUserId = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `usr-${Date.now()}`;
+      }
+
+      // 2. Synchronize canonical local store with same authoritative Auth UUID & targetBizUuid
       createAuthUserRecord(
         emailTrim,
         empPassword,
@@ -3945,7 +4041,7 @@ app.post(
           roles: assignedRoles,
           department: department || 'Operations',
           job_title: job_title || 'Team Member',
-          business_id: activeBizId,
+          business_id: targetBizUuid,
         },
         authUserId
       );
@@ -3959,17 +4055,18 @@ app.post(
 
       const bm = upsertBusinessMember({
         user_id: authUserId,
-        business_id: activeBizId,
+        business_id: targetBizUuid,
         role: primaryRole,
       });
 
       assignedRoles.forEach((rKey) => {
-        insertMemberRole(authUserId, activeBizId, rKey, req.userId, bm.id);
+        const canonicalKey = rKey.toLowerCase().replace(/\s+/g, '_');
+        insertMemberRole(authUserId, targetBizUuid, canonicalKey, req.userId, bm.id);
       });
 
       const newEmp = {
         id: `emp-${bm.id || Date.now()}`,
-        business_id: activeBizId,
+        business_id: targetBizUuid,
         user_id: authUserId,
         first_name: (first_name || rawFullName.split(' ')[0] || '').trim(),
         last_name: (last_name || rawFullName.split(' ').slice(1).join(' ') || '').trim(),
@@ -3999,14 +4096,14 @@ app.post(
 
       DEMO_MEMBERS.push({
         user_id: authUserId,
-        business_id: activeBizId,
+        business_id: targetBizUuid,
         role: primaryRole as BusinessRole,
       });
 
       if (!STORE.activityLogs) STORE.activityLogs = [];
       STORE.activityLogs.unshift({
         id: `log-${Date.now()}`,
-        business_id: activeBizId,
+        business_id: targetBizUuid,
         action: 'EMPLOYEE_CREATED',
         description: `Created employee ${rawFullName} (${emailTrim}) with roles: ${assignedRoles.join(', ')}`,
         created_at: new Date().toISOString(),
