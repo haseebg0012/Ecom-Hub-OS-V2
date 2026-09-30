@@ -7,12 +7,9 @@ function getEnvValue(key: string): string {
     const metaEnv = metaObj?.env;
     if (metaEnv) {
       if (key === 'VITE_SUPABASE_URL' && metaEnv.VITE_SUPABASE_URL) return String(metaEnv.VITE_SUPABASE_URL);
-      if (key === 'NEXT_PUBLIC_SUPABASE_URL' && metaEnv.NEXT_PUBLIC_SUPABASE_URL) return String(metaEnv.NEXT_PUBLIC_SUPABASE_URL);
-      if (key === 'VITE_SUPABASE_ANON_KEY' && metaEnv.VITE_SUPABASE_ANON_KEY) return String(metaEnv.VITE_SUPABASE_ANON_KEY);
-      if (key === 'NEXT_PUBLIC_SUPABASE_ANON_KEY' && metaEnv.NEXT_PUBLIC_SUPABASE_ANON_KEY) return String(metaEnv.NEXT_PUBLIC_SUPABASE_ANON_KEY);
-      if (key === 'NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY' && metaEnv.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY) return String(metaEnv.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY);
+      if (key === 'VITE_SUPABASE_PUBLISHABLE_KEY' && metaEnv.VITE_SUPABASE_PUBLISHABLE_KEY) return String(metaEnv.VITE_SUPABASE_PUBLISHABLE_KEY);
+      if (key === 'SUPABASE_URL' && metaEnv.SUPABASE_URL) return String(metaEnv.SUPABASE_URL);
       if (key === 'VITE_APP_URL' && metaEnv.VITE_APP_URL) return String(metaEnv.VITE_APP_URL);
-      if (key === 'NEXT_PUBLIC_APP_URL' && metaEnv.NEXT_PUBLIC_APP_URL) return String(metaEnv.NEXT_PUBLIC_APP_URL);
       const dynamicVal = metaEnv[key];
       if (dynamicVal && typeof dynamicVal === 'string') return dynamicVal;
     }
@@ -109,39 +106,38 @@ export function normalizeSupabaseKey(raw: string | null | undefined): string {
     !trimmed ||
     trimmed === 'undefined' ||
     trimmed === 'null' ||
-    trimmed.includes('your-supabase-')
+    trimmed.includes('your-supabase-') ||
+    trimmed === 'ecomhub-canonical-anon-key'
   ) {
     return '';
   }
   return trimmed;
 }
 
+export const CANONICAL_SUPABASE_PROJECT_URL = 'https://qmzvvuvlvjlykbxmybrd.supabase.co';
+export const CANONICAL_SUPABASE_PROJECT_REF = 'qmzvvuvlvjlykbxmybrd';
+
 function resolveInitialUrl(): string {
   const candidate =
-    getEnvValue('NEXT_PUBLIC_SUPABASE_URL') ||
     getEnvValue('VITE_SUPABASE_URL') ||
     getEnvValue('SUPABASE_URL') ||
-    '';
+    CANONICAL_SUPABASE_PROJECT_URL;
   const clean = normalizeSupabaseUrl(candidate);
-  if (clean) return clean;
-  return getAppUrl();
+  return clean || CANONICAL_SUPABASE_PROJECT_URL;
 }
 
 function resolveInitialKey(): string {
   const candidate =
-    getEnvValue('NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY') ||
-    getEnvValue('NEXT_PUBLIC_SUPABASE_ANON_KEY') ||
-    getEnvValue('VITE_SUPABASE_ANON_KEY') ||
+    getEnvValue('VITE_SUPABASE_PUBLISHABLE_KEY') ||
     '';
-  const clean = normalizeSupabaseKey(candidate);
-  if (clean) return clean;
-  return 'ecomhub-canonical-anon-key';
+  return normalizeSupabaseKey(candidate);
 }
 
 export let SUPABASE_URL = resolveInitialUrl();
 export let SUPABASE_ANON_KEY = resolveInitialKey();
 
-export let isSupabaseConfigured = true;
+// Only considered configured when real, non-placeholder credentials exist
+export let isSupabaseConfigured = Boolean(SUPABASE_URL && SUPABASE_ANON_KEY);
 
 export interface SupabaseConfigStatus {
   isConfigured: boolean;
@@ -150,6 +146,7 @@ export interface SupabaseConfigStatus {
   url: string;
   error: string | null;
   rawUrl: string;
+  projectRef: string;
 }
 
 /**
@@ -158,51 +155,49 @@ export interface SupabaseConfigStatus {
  */
 export function getSupabaseConfigStatus(): SupabaseConfigStatus {
   const rawUrl =
-    getEnvValue('NEXT_PUBLIC_SUPABASE_URL') ||
     getEnvValue('VITE_SUPABASE_URL') ||
     getEnvValue('SUPABASE_URL') ||
-    '';
+    CANONICAL_SUPABASE_PROJECT_URL;
   const rawKey =
-    getEnvValue('NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY') ||
-    getEnvValue('NEXT_PUBLIC_SUPABASE_ANON_KEY') ||
-    getEnvValue('VITE_SUPABASE_ANON_KEY') ||
+    getEnvValue('VITE_SUPABASE_PUBLISHABLE_KEY') ||
     '';
-  const cleanUrl = normalizeSupabaseUrl(rawUrl) || getAppUrl();
-  const cleanKey = normalizeSupabaseKey(rawKey) || 'ecomhub-canonical-anon-key';
+  const cleanUrl = normalizeSupabaseUrl(rawUrl) || CANONICAL_SUPABASE_PROJECT_URL;
+  const cleanKey = normalizeSupabaseKey(rawKey);
+  const configured = Boolean(cleanUrl && cleanKey);
 
   return {
-    isConfigured: true,
-    hasValidUrl: true,
-    hasValidKey: true,
+    isConfigured: configured,
+    hasValidUrl: Boolean(cleanUrl),
+    hasValidKey: Boolean(cleanKey),
     url: cleanUrl,
-    error: null,
+    error: configured
+      ? null
+      : 'Supabase authentication service is not fully configured. Missing VITE_SUPABASE_PUBLISHABLE_KEY for project qmzvvuvlvjlykbxmybrd.',
     rawUrl,
+    projectRef: CANONICAL_SUPABASE_PROJECT_REF,
   };
 }
 
 export function getAppUrl(): string {
-  // 1. Check configured NEXT_PUBLIC_APP_URL or APP_URL
+  // 1. Derive dynamically from browser origin if available
+  if (typeof window !== 'undefined' && window.location && window.location.origin) {
+    const origin = window.location.origin.replace(/\/+$/, '');
+    return origin;
+  }
+
+  // 2. Check configured VITE_APP_URL or APP_URL
   const metaEnv = typeof import.meta !== 'undefined' ? (import.meta as any).env : undefined;
   const procEnv = typeof process !== 'undefined' ? process.env : undefined;
   const configured =
-    metaEnv?.NEXT_PUBLIC_APP_URL ||
     metaEnv?.VITE_APP_URL ||
-    procEnv?.NEXT_PUBLIC_APP_URL ||
     procEnv?.APP_URL ||
     '';
 
   if (configured && configured !== 'MY_APP_URL' && typeof configured === 'string' && configured.trim()) {
     const trimmed = configured.trim().replace(/\/+$/, '');
-    // In production or when explicitly configured, use this canonical domain
     if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
       return trimmed;
     }
-  }
-
-  // 2. Derive dynamically from browser origin if available
-  if (typeof window !== 'undefined' && window.location && window.location.origin) {
-    const origin = window.location.origin.replace(/\/+$/, '');
-    return origin;
   }
 
   return 'http://localhost:3000';

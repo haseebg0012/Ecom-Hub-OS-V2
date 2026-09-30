@@ -190,7 +190,7 @@ CREATE POLICY "Owners can remove members or members can remove themselves" ON pu
           <p className="text-xs text-[#64748B] leading-relaxed truncate">
             {isSupabaseConfigured
               ? `Target: ${SUPABASE_URL}`
-              : 'Configured via NEXT_PUBLIC_SUPABASE_URL in .env'}
+              : 'Configured via VITE_SUPABASE_URL in .env'}
           </p>
         </div>
       </div>

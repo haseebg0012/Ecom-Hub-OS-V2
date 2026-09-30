@@ -169,16 +169,6 @@ interface MemberRecord {
 
 const DEMO_MEMBERS: MemberRecord[] = [
   { user_id: 'usr-ecometrix-001', business_id: 'biz-ecometrix-001', role: 'Owner' },
-  { user_id: 'usr-colleague-002', business_id: 'biz-ecometrix-001', role: 'Admin' },
-  { user_id: 'usr-demo-manager', business_id: 'biz-ecometrix-001', role: 'Manager' },
-  { user_id: 'usr-demo-finance', business_id: 'biz-ecometrix-001', role: 'Finance' },
-  { user_id: 'usr-demo-sales', business_id: 'biz-ecometrix-001', role: 'Sales' },
-  { user_id: 'usr-demo-employee', business_id: 'biz-ecometrix-001', role: 'Employee' },
-  { user_id: 'usr-demo-viewer', business_id: 'biz-ecometrix-001', role: 'Viewer' },
-
-  // Business B (isolated second tenant)
-  { user_id: 'usr-ecometrix-001', business_id: 'biz-acme-002', role: 'Admin' },
-  { user_id: 'usr-tenant-b-owner', business_id: 'biz-acme-002', role: 'Owner' },
 ];
 
 // Helper to look up member role
@@ -359,8 +349,8 @@ const STORE: FinancialDataStore = {
       name: 'Main Business Bank (Meezan)',
       type: 'Bank',
       currency: 'PKR',
-      opening_balance: 1500000,
-      current_balance: 2450000,
+      opening_balance: 0,
+      current_balance: 0,
       description: 'Primary Pakistani Rupee operational treasury',
       is_active: true,
       created_at: new Date('2025-01-01').toISOString(),
@@ -372,8 +362,8 @@ const STORE: FinancialDataStore = {
       name: 'USD Global Mercury Bank',
       type: 'Bank',
       currency: 'USD',
-      opening_balance: 15000,
-      current_balance: 28500,
+      opening_balance: 0,
+      current_balance: 0,
       description: 'US Dollar international client settlements',
       is_active: true,
       created_at: new Date('2025-01-01').toISOString(),
@@ -385,23 +375,9 @@ const STORE: FinancialDataStore = {
       name: 'Cash Vault / Petty Cash',
       type: 'Cash',
       currency: 'PKR',
-      opening_balance: 250000,
-      current_balance: 180000,
+      opening_balance: 0,
+      current_balance: 0,
       description: 'On-site office petty cash for local operations',
-      is_active: true,
-      created_at: new Date('2025-01-01').toISOString(),
-      updated_at: new Date().toISOString(),
-    },
-    // Business B isolated account
-    {
-      id: 'acc-b-001',
-      business_id: 'biz-acme-002',
-      name: 'Acme Growth Silicon Valley Bank',
-      type: 'Bank',
-      currency: 'USD',
-      opening_balance: 85000,
-      current_balance: 120000,
-      description: 'Tenant B operating funds',
       is_active: true,
       created_at: new Date('2025-01-01').toISOString(),
       updated_at: new Date().toISOString(),
@@ -416,305 +392,25 @@ const STORE: FinancialDataStore = {
     // Business B isolated category
     { id: 'cat-b-001', business_id: 'biz-acme-002', name: 'Acme Advisory Fee', type: 'Income', is_default: true, is_active: true },
   ],
-  transactions: [
-    {
-      id: 'tx-001',
-      business_id: 'biz-ecometrix-001',
-      transaction_type: 'income',
-      description: 'Q1 Consulting Retainer — North Star Apparel',
-      reference: 'INV-2025-001',
-      category_id: 'cat-001',
-      account_id: 'acc-002',
-      amount: 4500,
-      currency: 'USD',
-      exchange_rate: 278.5,
-      base_amount: 1253250,
-      base_currency: 'PKR',
-      transaction_date: '2025-02-15',
-      payment_method: 'Bank Transfer',
-      status: 'completed',
-      created_by: 'usr-ecometrix-001',
-      created_at: new Date('2025-02-15').toISOString(),
-      updated_at: new Date('2025-02-15').toISOString(),
-    },
-    {
-      id: 'tx-002',
-      business_id: 'biz-ecometrix-001',
-      transaction_type: 'expense',
-      description: 'AWS Cloud Hosting & Server Infrastructure',
-      reference: 'AWS-9921',
-      category_id: 'cat-002',
-      account_id: 'acc-002',
-      amount: 650,
-      currency: 'USD',
-      exchange_rate: 278.5,
-      base_amount: 181025,
-      base_currency: 'PKR',
-      transaction_date: '2025-02-20',
-      payment_method: 'Card',
-      status: 'completed',
-      created_by: 'usr-ecometrix-001',
-      created_at: new Date('2025-02-20').toISOString(),
-      updated_at: new Date('2025-02-20').toISOString(),
-    },
-    // Business B isolated transaction
-    {
-      id: 'tx-b-001',
-      business_id: 'biz-acme-002',
-      transaction_type: 'income',
-      description: 'Acme Growth Labs Series A Consulting',
-      reference: 'INV-ACME-01',
-      category_id: 'cat-b-001',
-      account_id: 'acc-b-001',
-      amount: 12000,
-      currency: 'USD',
-      exchange_rate: 1.0,
-      base_amount: 12000,
-      base_currency: 'USD',
-      transaction_date: '2025-02-10',
-      payment_method: 'Bank Transfer',
-      status: 'completed',
-      created_by: 'usr-tenant-b-owner',
-      created_at: new Date('2025-02-10').toISOString(),
-      updated_at: new Date('2025-02-10').toISOString(),
-    },
-  ],
-  expenses: [
-    {
-      id: 'exp-001',
-      business_id: 'biz-ecometrix-001',
-      transaction_id: 'tx-002',
-      category_id: 'cat-002',
-      account_id: 'acc-002',
-      amount: 650,
-      currency: 'USD',
-      exchange_rate: 278.5,
-      base_amount: 181025,
-      base_currency: 'PKR',
-      vendor: 'Amazon Web Services',
-      description: 'AWS Cloud Hosting & Server Infrastructure',
-      expense_date: '2025-02-20',
-      payment_method: 'Card',
-      reference: 'AWS-9921',
-      created_by: 'usr-ecometrix-001',
-      created_at: new Date('2025-02-20').toISOString(),
-      updated_at: new Date('2025-02-20').toISOString(),
-    },
-  ],
-  incomeRecords: [
-    {
-      id: 'inc-001',
-      business_id: 'biz-ecometrix-001',
-      transaction_id: 'tx-001',
-      category_id: 'cat-001',
-      account_id: 'acc-002',
-      amount: 4500,
-      currency: 'USD',
-      exchange_rate: 278.5,
-      base_amount: 1253250,
-      base_currency: 'PKR',
-      source: 'North Star Apparel Retainer',
-      income_date: '2025-02-15',
-      payment_method: 'Bank Transfer',
-      reference: 'INV-2025-001',
-      created_by: 'usr-ecometrix-001',
-      created_at: new Date('2025-02-15').toISOString(),
-      updated_at: new Date('2025-02-15').toISOString(),
-    },
-  ],
-  recurringTransactions: [
-    {
-      id: 'rec-001',
-      business_id: 'biz-ecometrix-001',
-      name: 'AWS Cloud Hosting & Infrastructure',
-      description: 'Monthly cloud infrastructure for Shopify app proxies & database',
-      transaction_type: 'expense',
-      type: 'expense',
-      category_id: 'cat-002',
-      account_id: 'acc-002',
-      client_id: null,
-      amount: 650,
-      currency: 'USD',
-      exchange_rate: 278.5,
-      base_currency: 'PKR',
-      base_amount: 181025,
-      frequency: 'Monthly',
-      start_date: '2025-01-01',
-      end_date: null,
-      next_run_date: '2026-09-20',
-      payment_method: 'Card',
-      reference: 'REC-AWS-01',
-      notes: 'Billed on 20th of every month',
-      is_active: true,
-      status: 'Active',
-      last_run_at: '2026-08-20T10:00:00.000Z',
-      created_by: 'usr-ecometrix-001',
-      created_at: new Date('2025-01-01').toISOString(),
-      updated_at: new Date('2026-08-20').toISOString(),
-    },
-    {
-      id: 'rec-002',
-      business_id: 'biz-ecometrix-001',
-      name: 'North Star Apparel Marketing Retainer',
-      description: 'Monthly retainer fee for full-funnel ad management',
-      transaction_type: 'income',
-      type: 'income',
-      category_id: 'cat-001',
-      account_id: 'acc-002',
-      client_id: 'client-001',
-      amount: 4500,
-      currency: 'USD',
-      exchange_rate: 278.5,
-      base_currency: 'PKR',
-      base_amount: 1253250,
-      frequency: 'Monthly',
-      start_date: '2025-01-01',
-      end_date: null,
-      next_run_date: '2026-09-25',
-      payment_method: 'Bank Transfer',
-      reference: 'REC-RET-01',
-      notes: 'Auto-billed on 25th of month',
-      is_active: true,
-      status: 'Active',
-      last_run_at: '2026-08-25T10:00:00.000Z',
-      created_by: 'usr-ecometrix-001',
-      created_at: new Date('2025-01-01').toISOString(),
-      updated_at: new Date('2026-08-25').toISOString(),
-    },
-    {
-      id: 'rec-003',
-      business_id: 'biz-ecometrix-001',
-      name: 'Klaviyo & Email Marketing Software',
-      description: 'Quarterly email automation platform license',
-      transaction_type: 'expense',
-      type: 'expense',
-      category_id: 'cat-002',
-      account_id: 'acc-001',
-      client_id: null,
-      amount: 85000,
-      currency: 'PKR',
-      exchange_rate: 1.0,
-      base_currency: 'PKR',
-      base_amount: 85000,
-      frequency: 'Quarterly',
-      start_date: '2025-01-01',
-      end_date: null,
-      next_run_date: '2026-10-01',
-      payment_method: 'Bank Transfer',
-      reference: 'KLV-SUB-Q',
-      notes: null,
-      is_active: true,
-      status: 'Active',
-      last_run_at: '2026-07-01T10:00:00.000Z',
-      created_by: 'usr-ecometrix-001',
-      created_at: new Date('2025-01-01').toISOString(),
-      updated_at: new Date('2026-07-01').toISOString(),
-    },
-    {
-      id: 'rec-004',
-      business_id: 'biz-ecometrix-001',
-      name: 'Warehouse Fleet Maintenance Reserve',
-      description: 'Monthly capital reserve for distribution vans',
-      transaction_type: 'investment',
-      type: 'investment',
-      category_id: null,
-      account_id: 'acc-001',
-      client_id: null,
-      amount: 50000,
-      currency: 'PKR',
-      exchange_rate: 1.0,
-      base_currency: 'PKR',
-      base_amount: 50000,
-      frequency: 'Monthly',
-      start_date: '2025-01-01',
-      end_date: null,
-      next_run_date: '2026-09-30',
-      payment_method: 'Bank Transfer',
-      reference: 'CAP-FLEET-01',
-      notes: 'Capital investment transfer',
-      is_active: true,
-      status: 'Active',
-      last_run_at: '2026-08-31T10:00:00.000Z',
-      created_by: 'usr-ecometrix-001',
-      created_at: new Date('2025-01-01').toISOString(),
-      updated_at: new Date('2026-08-31').toISOString(),
-    },
-  ],
-  recurringRuns: [
-    {
-      id: 'run-001',
-      business_id: 'biz-ecometrix-001',
-      recurring_transaction_id: 'rec-001',
-      scheduled_date: '2026-08-20',
-      transaction_id: 'tx-exp-001',
-      status: 'success',
-      error_message: null,
-      created_at: '2026-08-20T10:00:00.000Z',
-    },
-    {
-      id: 'run-002',
-      business_id: 'biz-ecometrix-001',
-      recurring_transaction_id: 'rec-002',
-      scheduled_date: '2026-08-25',
-      transaction_id: 'tx-inc-001',
-      status: 'success',
-      error_message: null,
-      created_at: '2026-08-25T10:00:00.000Z',
-    },
-  ],
-  clients: [
-    {
-      id: 'client-001',
-      business_id: 'biz-ecometrix-001',
-      name: 'North Star Apparel Ltd.',
-      email: 'finance@northstarapparel.com',
-      company_name: 'North Star Apparel',
-    },
-    {
-      id: 'client-002',
-      business_id: 'biz-ecometrix-001',
-      name: 'Velocity D2C Brands',
-      email: 'billing@velocityd2c.com',
-      company_name: 'Velocity D2C',
-    },
-  ],
-  leads: [
-    { id: 'lead-001', business_id: 'biz-ecometrix-001', name: 'Zainab Ahmed', company: 'Apex Retail', email: 'zainab@apexretail.pk', phone: '+923001234567', status: 'Qualified', source: 'LinkedIn', priority: 'High', assigned_to: 'usr-demo-sales', created_at: '2025-02-10' },
-    { id: 'lead-002', business_id: 'biz-ecometrix-001', name: 'Bilal Khan', company: 'Lahore Textiles', email: 'bilal@lahoretextiles.com', phone: '+923219876543', status: 'Contacted', source: 'Website', priority: 'Medium', assigned_to: 'usr-demo-sales', created_at: '2025-02-18' },
-  ],
-  invoices: [
-    { id: 'inv-001', business_id: 'biz-ecometrix-001', invoice_number: 'INV-2025-001', client_id: 'client-001', amount: 4500, currency: 'USD', status: 'paid', due_date: '2025-02-15' },
-    { id: 'inv-002', business_id: 'biz-ecometrix-001', invoice_number: 'INV-2025-002', client_id: 'client-002', amount: 120000, currency: 'PKR', status: 'overdue', due_date: '2025-02-10' },
-    { id: 'inv-003', business_id: 'biz-ecometrix-001', invoice_number: 'INV-2025-003', client_id: 'client-001', amount: 35000, currency: 'PKR', status: 'unpaid', due_date: '2025-03-01' },
-  ],
-  payments: [
-    { id: 'pay-001', business_id: 'biz-ecometrix-001', client_id: 'client-001', amount: 4500, currency: 'USD', payment_date: '2025-02-15', reference: 'INV-2025-001' },
-  ],
+  transactions: [],
+  expenses: [],
+  incomeRecords: [],
+  recurringTransactions: [],
+  recurringRuns: [],
+  clients: [],
+  leads: [],
+  invoices: [],
+  payments: [],
   employees: [
-    { id: 'emp-001', business_id: 'biz-ecometrix-001', name: 'Haseeb Gul', email: 'haseebg0012@gmail.com', role: 'Owner', department: 'Executive', status: 'Active', created_at: '2025-01-15T09:00:00Z' },
-    { id: 'emp-002', business_id: 'biz-ecometrix-001', name: 'Sara Ali', email: 'sara.ali@outlook.com', role: 'Finance', department: 'Finance', status: 'Active', created_at: '2025-01-16T11:00:00Z' },
+    { id: 'emp-owner', business_id: 'biz-ecometrix-001', name: 'Haseeb Gul', email: 'haseebg0012@gmail.com', role: 'Owner', department: 'Executive', status: 'Active', created_at: '2025-01-01T00:00:00.000Z' },
   ],
-  projects: [
-    { id: 'proj-001', business_id: 'biz-ecometrix-001', name: 'Q1 Omnichannel Growth Strategy', client_id: 'client-001', status: 'Active', budget: 1500000 },
-  ],
-  tasks: [
-    { id: 'task-001', business_id: 'biz-ecometrix-001', title: 'Review Q1 Financial Audit', status: 'Pending', priority: 'High', due_date: '2025-03-05' },
-  ],
-  documents: [
-    { id: 'doc-001', business_id: 'biz-ecometrix-001', title: 'Standard Client Retainer Agreement', category: 'Legal', updated_at: '2025-01-10' },
-  ],
-  notifications: [
-    { id: 'notif-001', business_id: 'biz-ecometrix-001', title: 'New lead assigned', message: 'Zainab Ahmed was assigned to you.', read: false, created_at: new Date().toISOString() },
-  ],
-  activityLogs: [
-    { id: 'log-001', business_id: 'biz-ecometrix-001', action: 'TRANSACTION_CREATED', description: 'Created income transaction of USD 4,500', created_at: new Date().toISOString() },
-  ],
-  aiConversations: [
-    { id: 'conv-001', business_id: 'biz-ecometrix-001', user_id: 'usr-ecometrix-001', title: 'Revenue & Invoices Summary', created_at: new Date().toISOString() },
-  ],
-  aiMessages: [
-    { id: 'msg-001', business_id: 'biz-ecometrix-001', conversation_id: 'conv-001', role: 'assistant', content: 'Welcome to EcomHub OS AI Business Copilot. How can I assist you with your business data today?', created_at: new Date().toISOString() },
-  ],
+  projects: [],
+  tasks: [],
+  documents: [],
+  notifications: [],
+  activityLogs: [],
+  aiConversations: [],
+  aiMessages: [],
 };
 
 // Sync in-memory store cache with persistent canonical Supabase database
@@ -2261,20 +1957,21 @@ app.get('/api/health', (req, res) => {
 
 // Public Supabase Configuration Metadata (ONLY public URL and public Anon/Publishable Key)
 app.get('/api/auth/config', (req, res) => {
-  const rawUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || '';
-  const supabaseUrl = normalizeSupabaseUrl(rawUrl);
-  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || '';
+  const rawUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || 'https://qmzvvuvlvjlykbxmybrd.supabase.co';
+  const supabaseUrl = normalizeSupabaseUrl(rawUrl) || 'https://qmzvvuvlvjlykbxmybrd.supabase.co';
+  const supabasePublishableKey = process.env.VITE_SUPABASE_PUBLISHABLE_KEY || null;
 
   const isConfigured = Boolean(
     supabaseUrl &&
-    supabaseAnonKey &&
+    supabasePublishableKey &&
     !supabaseUrl.includes('your-project') &&
-    !supabaseAnonKey.includes('your-supabase-')
+    !supabasePublishableKey.includes('your-supabase-') &&
+    supabasePublishableKey !== 'ecomhub-canonical-anon-key'
   );
 
   res.json({
-    supabaseUrl: isConfigured ? supabaseUrl : null,
-    supabaseAnonKey: isConfigured ? supabaseAnonKey : null,
+    supabaseUrl: supabaseUrl,
+    supabasePublishableKey: isConfigured ? supabasePublishableKey : null,
     isConfigured,
   });
 });
@@ -3856,9 +3553,9 @@ Rules:
 // EMPLOYEE INVITATION & MANAGEMENT API
 // ==============================================================================
 function getSupabaseAdmin() {
-  const rawUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || '';
-  const supabaseUrl = normalizeSupabaseUrl(rawUrl);
-  let supabaseServiceKey = process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY || '';
+  const rawUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || 'https://qmzvvuvlvjlykbxmybrd.supabase.co';
+  const supabaseUrl = normalizeSupabaseUrl(rawUrl) || 'https://qmzvvuvlvjlykbxmybrd.supabase.co';
+  let supabaseServiceKey = process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || '';
   supabaseServiceKey = supabaseServiceKey.trim().replace(/^["'`]+/, '').replace(/["'`]+$/, '').trim();
   if (!supabaseUrl || !supabaseServiceKey || supabaseUrl.includes('your-project') || supabaseServiceKey.includes('your-supabase-')) {
     return null;
@@ -3875,13 +3572,12 @@ function getSupabaseAdmin() {
 
 /**
  * Resolves the public application URL for redirects and callbacks.
- * Checks environment configuration (NEXT_PUBLIC_APP_URL, APP_URL, VERCEL_URL)
+ * Checks environment configuration (APP_URL)
  * and falls back to dynamic request headers or environment defaults.
  */
 function getAppUrl(req?: Request): string {
-  // 1. Explicit environment variable configuration (Single source of truth)
+  // 1. Explicit environment variable configuration
   const configured =
-    process.env.NEXT_PUBLIC_APP_URL ||
     process.env.APP_URL ||
     (process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : '') ||
     (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : '');
@@ -4177,48 +3873,13 @@ app.post(
         ? (roles.includes(primaryRole) ? roles : [primaryRole, ...roles])
         : [primaryRole];
       const empPassword = (password || temp_password || 'Admin1234!').trim();
+      let authUserId = user_id || (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `usr-${Date.now()}`);
 
-      // 1. Create Auth user record once in canonical DB
-      const authUser = createAuthUserRecord(
-        emailTrim,
-        empPassword,
-        {
-          full_name: rawFullName,
-          role: primaryRole,
-          roles: assignedRoles,
-          department: department || 'Operations',
-          job_title: job_title || 'Team Member',
-          business_id: activeBizId,
-        },
-        user_id
-      );
-      const authUserId = authUser.id;
-
-      // 2. Upsert profile once in canonical DB
-      upsertProfile({
-        id: authUserId,
-        email: emailTrim,
-        full_name: rawFullName,
-        updated_at: new Date().toISOString(),
-      });
-
-      // 3. Upsert business member once in canonical DB
-      const bm = upsertBusinessMember({
-        user_id: authUserId,
-        business_id: activeBizId,
-        role: primaryRole,
-      });
-
-      // 4. Insert one role-assignment row per selected role in canonical business_member_roles table
-      assignedRoles.forEach((rKey) => {
-        insertMemberRole(authUserId, activeBizId, rKey, req.userId, bm.id);
-      });
-
-      // 5. If remote adminClient is available, mirror to remote Supabase
+      // 1. If remote adminClient is available, create Supabase Auth user FIRST
       const adminClient = getSupabaseAdmin();
       if (adminClient) {
         try {
-          await adminClient.auth.admin.createUser({
+          const { data: createdAuth, error: authErr } = await adminClient.auth.admin.createUser({
             email: emailTrim,
             password: empPassword,
             email_confirm: true,
@@ -4232,6 +3893,17 @@ app.post(
             }
           });
 
+          if (authErr) {
+            console.error('[Remote Supabase Auth Create User Error]:', authErr.message);
+            res.status(500).json({ error: `Failed to create authentication user in Supabase: ${authErr.message}` });
+            return;
+          }
+
+          if (createdAuth?.user?.id) {
+            authUserId = createdAuth.user.id;
+          }
+
+          // Upsert in remote Supabase tables using authoritative Auth UUID
           await adminClient.from('profiles').upsert({
             id: authUserId,
             email: emailTrim,
@@ -4257,9 +3929,43 @@ app.post(
             });
           }
         } catch (adminErr: any) {
-          console.warn('[Remote Supabase Admin Create Employee Notice]:', adminErr?.message);
+          console.error('[Remote Supabase Admin Create Employee Error]:', adminErr);
+          res.status(500).json({ error: `Supabase employee provisioning error: ${adminErr?.message || 'Unknown error'}` });
+          return;
         }
       }
+
+      // 2. Synchronize canonical local store with same authoritative Auth UUID
+      createAuthUserRecord(
+        emailTrim,
+        empPassword,
+        {
+          full_name: rawFullName,
+          role: primaryRole,
+          roles: assignedRoles,
+          department: department || 'Operations',
+          job_title: job_title || 'Team Member',
+          business_id: activeBizId,
+        },
+        authUserId
+      );
+
+      upsertProfile({
+        id: authUserId,
+        email: emailTrim,
+        full_name: rawFullName,
+        updated_at: new Date().toISOString(),
+      });
+
+      const bm = upsertBusinessMember({
+        user_id: authUserId,
+        business_id: activeBizId,
+        role: primaryRole,
+      });
+
+      assignedRoles.forEach((rKey) => {
+        insertMemberRole(authUserId, activeBizId, rKey, req.userId, bm.id);
+      });
 
       const newEmp = {
         id: `emp-${bm.id || Date.now()}`,

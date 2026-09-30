@@ -578,7 +578,63 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const cleanEmail = email.trim().toLowerCase();
 
-    // Check if email exists in any known system store
+    // 1. Authoritative Supabase Auth flow when client is configured
+    const client = await resolveClient();
+    if (client) {
+      try {
+        const { data: authData, error: authError } = await client.auth.signInWithPassword({
+          email: cleanEmail,
+          password: pass,
+        });
+
+        if (authError) {
+          const msg = (authError.message || '').toLowerCase();
+          if (msg.includes('invalid login credentials') || msg.includes('invalid credentials') || msg.includes('password')) {
+            return { success: false, error: 'Invalid credentials.' };
+          }
+          if (msg.includes('user not found') || msg.includes('not exist') || msg.includes('not registered')) {
+            return { success: false, error: 'Account does not exist.' };
+          }
+          if (msg.includes('email not confirmed')) {
+            return { success: false, error: 'Please confirm your email address before logging in.' };
+          }
+          return { success: false, error: authError.message || 'Invalid credentials.' };
+        }
+
+        if (authData?.user) {
+          const authUser = authData.user;
+
+          // Check profile
+          const { data: prof, error: profErr } = await client
+            .from('profiles')
+            .select('id, email, full_name, avatar_url, updated_at')
+            .eq('id', authUser.id)
+            .maybeSingle();
+
+          if (profErr || !prof) {
+            return { success: false, error: 'Your profile could not be loaded.' };
+          }
+
+          // Check business membership
+          const { data: mem, error: memErr } = await client
+            .from('business_members')
+            .select('id, user_id, business_id, role')
+            .eq('user_id', authUser.id)
+            .maybeSingle();
+
+          if (memErr || !mem) {
+            return { success: false, error: 'Your account is not assigned to this organization.' };
+          }
+
+          await initializeAuth();
+          return { success: true };
+        }
+      } catch (authErr: any) {
+        console.warn('[Supabase Auth Sign-In Notice]:', authErr?.message);
+      }
+    }
+
+    // 2. Offline / Local Canonical DB fallback when remote client is not yet provisioned
     let isKnownEmail = false;
     if (cleanEmail === 'haseebg0012@gmail.com') isKnownEmail = true;
 
@@ -606,130 +662,56 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     } catch {}
 
-    // Allow employee login even if cache check missed it slightly
-    try {
-      const rawEmps = localStorage.getItem('ecomhub_employees');
-      if (rawEmps) {
-        const emps = JSON.parse(rawEmps);
-        if (emps.some((e: any) => e.email?.trim().toLowerCase() === cleanEmail)) {
-          isKnownEmail = true;
+    // Check backend API employees
+    if (!isKnownEmail) {
+      try {
+        const apiRes = await fetch('/api/employees', {
+          headers: {
+            'x-business-id': 'biz-ecometrix-001',
+            'x-user-role': 'Owner',
+          }
+        });
+        if (apiRes.ok) {
+          const apiEmps = await apiRes.json();
+          if (Array.isArray(apiEmps) && apiEmps.some((e: any) => e.email?.toLowerCase() === cleanEmail)) {
+            isKnownEmail = true;
+          }
         }
-      }
-    } catch {}
+      } catch {}
+    }
 
     if (!isKnownEmail) {
-      const client = await resolveClient();
-      if (client) {
-        try {
-          const { data, error } = await client.auth.signInWithPassword({
-            email: cleanEmail,
-            password: pass,
-          });
-          if (!error && data?.session) {
-            await initializeAuth();
-            return { success: true };
-          }
-        } catch {}
-      }
       return { success: false, error: 'Account does not exist.' };
     }
 
-    // 1. Employee Sub-Profile / Registered Employee Login (Database Authoritative Flow)
+    // A. Employee Sub-Profile / Registered Employee Login (Local Authoritative Flow)
     try {
       let foundEmp: any = null;
       let dbRolesLoaded: BusinessRole[] = [];
 
-      // Always execute authoritative database lookup first:
-      // Supabase -> profiles -> business_members -> business_member_roles -> load ALL assigned roles
-      const client = await resolveClient();
-      if (client) {
-        try {
-          const { data: prof } = await client
-            .from('profiles')
-            .select('id, email, full_name, avatar_url')
-            .eq('email', cleanEmail)
-            .maybeSingle();
-
-          if (prof) {
-            const { data: mem } = await client
-              .from('business_members')
-              .select('id, user_id, business_id, role')
-              .eq('user_id', prof.id)
-              .maybeSingle();
-
-            if (mem) {
-              // Query canonical business_member_roles table for all assigned roles
-              const { data: bmrRows } = await client
-                .from('business_member_roles')
-                .select('id, role_key, business_id')
-                .eq('user_id', prof.id);
-
-              if (bmrRows && Array.isArray(bmrRows) && bmrRows.length > 0) {
-                dbRolesLoaded = bmrRows
-                  .filter((r) => !r.business_id || r.business_id === mem.business_id)
-                  .map((r) => r.role_key as BusinessRole);
+      // Check server /api/employees endpoint first
+      try {
+        const apiRes = await fetch('/api/employees', {
+          headers: {
+            'x-business-id': 'biz-ecometrix-001',
+            'x-user-role': 'Owner',
+          }
+        });
+        if (apiRes.ok) {
+          const apiEmps = await apiRes.json();
+          if (Array.isArray(apiEmps)) {
+            const matched = apiEmps.find((e: any) => e.email?.toLowerCase() === cleanEmail);
+            if (matched) {
+              foundEmp = matched;
+              if (Array.isArray(matched.roles) && matched.roles.length > 0) {
+                dbRolesLoaded = matched.roles;
               }
-
-              // Check auth_users for stored password
-              let dbPassword = 'Admin1234!';
-              try {
-                const { data: authUser } = await client
-                  .from('auth_users')
-                  .select('password')
-                  .eq('email', cleanEmail)
-                  .maybeSingle();
-                if (authUser?.password) {
-                  dbPassword = authUser.password;
-                }
-              } catch {}
-
-              const finalRoles: BusinessRole[] = dbRolesLoaded.length > 0
-                ? dbRolesLoaded
-                : [mem.role as BusinessRole || 'Employee'];
-
-              foundEmp = {
-                id: `emp-${mem.id}`,
-                user_id: prof.id,
-                business_id: mem.business_id,
-                name: prof.full_name || 'Team Member',
-                email: prof.email,
-                role: finalRoles[0] || mem.role,
-                roles: finalRoles,
-                password: dbPassword,
-                temp_password: dbPassword,
-              };
             }
           }
-        } catch (dbErr) {
-          console.warn('[Login Auth DB Lookup Notice]:', dbErr);
         }
-      }
+      } catch {}
 
-      // If client query yielded nothing, check server /api/employees endpoint
-      if (!foundEmp) {
-        try {
-          const apiRes = await fetch('/api/employees', {
-            headers: {
-              'x-business-id': 'biz-ecometrix-001',
-              'x-user-role': 'Owner',
-            }
-          });
-          if (apiRes.ok) {
-            const apiEmps = await apiRes.json();
-            if (Array.isArray(apiEmps)) {
-              const matched = apiEmps.find((e: any) => e.email?.toLowerCase() === cleanEmail);
-              if (matched) {
-                foundEmp = matched;
-                if (Array.isArray(matched.roles) && matched.roles.length > 0) {
-                  dbRolesLoaded = matched.roles;
-                }
-              }
-            }
-          }
-        } catch {}
-      }
-
-      // If still not found, check localStorage as offline fallback only
+      // If not found from API, check localStorage cache
       if (!foundEmp) {
         try {
           const rawEmps = localStorage.getItem('ecomhub_employees');
@@ -956,7 +938,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } catch {}
 
     // 5. Supabase Auth fallback
-    const client = await resolveClient();
     if (client) {
       try {
         const { data, error } = await client.auth.signInWithPassword({

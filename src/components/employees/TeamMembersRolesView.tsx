@@ -796,43 +796,55 @@ export const TeamMembersRolesView: React.FC = () => {
       ? addForm.roles
       : [addForm.role, ...addForm.roles];
     const empPassword = addForm.password.trim() || 'Admin1234!';
-    let authUserId = typeof crypto !== 'undefined' && crypto.randomUUID
-      ? crypto.randomUUID()
-      : `usr-emp-${Date.now()}`;
+    let authUserId = '';
 
-    // 1. Supabase Auth registration with standalone client (preserves Owner session)
+    // 1. Authoritative Backend Employee Creation (runs Supabase Admin createUser and relational inserts)
     try {
-      const cfgRes = await fetch('/api/auth/config');
-      if (cfgRes.ok) {
-        const cfg = await cfgRes.json();
-        if (cfg.supabaseUrl && cfg.supabaseAnonKey) {
-          const standaloneClient = createClient(cfg.supabaseUrl, cfg.supabaseAnonKey, {
-            auth: { persistSession: false, autoRefreshToken: false }
-          });
-          const { data: signUpData } = await standaloneClient.auth.signUp({
-            email: cleanEmail,
-            password: empPassword,
-            options: {
-              data: {
-                full_name: addForm.name.trim(),
-                role: addForm.role,
-                roles: assignedRoles,
-                department: addForm.department.trim(),
-                job_title: addForm.jobTitle.trim(),
-                business_id: activeBusiness?.id || 'biz-ecometrix-001',
-              }
-            }
-          });
-          if (signUpData?.user?.id) {
-            authUserId = signUpData.user.id;
-          }
-        }
+      const empRes = await fetch('/api/employees', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer user:${user?.id || 'usr-ecometrix-001'}`,
+          'x-business-id': activeBusiness?.id || 'biz-ecometrix-001',
+          'x-user-id': user?.id || 'usr-ecometrix-001',
+          'x-user-role': activeBusiness?.role || 'Owner',
+        },
+        body: JSON.stringify({
+          name: addForm.name.trim(),
+          email: cleanEmail,
+          password: empPassword,
+          temp_password: empPassword,
+          role: addForm.role,
+          roles: assignedRoles,
+          job_title: addForm.jobTitle.trim() || 'Team Member',
+          department: addForm.department.trim() || 'General',
+          phone: addForm.phone.trim(),
+          status: 'Active',
+        })
+      });
+
+      if (!empRes.ok) {
+        const errData = await empRes.json().catch(() => ({}));
+        setAddFormError(errData.error || 'Failed to create employee account.');
+        setIsSubmittingAdd(false);
+        return;
       }
-    } catch (signUpErr) {
-      console.warn('[Supabase SignUp Notice]:', signUpErr);
+
+      const resData = await empRes.json();
+      if (resData?.employee?.user_id) {
+        authUserId = resData.employee.user_id;
+      }
+    } catch (netErr: any) {
+      console.warn('[Add Employee API Network Notice]:', netErr);
     }
 
-    // 2. Persist to Supabase public.profiles & public.business_members
+    if (!authUserId) {
+      authUserId = typeof crypto !== 'undefined' && crypto.randomUUID
+        ? crypto.randomUUID()
+        : `usr-emp-${Date.now()}`;
+    }
+
+    // 2. Direct client mirror if client is connected directly
     try {
       const client = getSupabaseClient();
       if (client) {
@@ -853,7 +865,6 @@ export const TeamMembersRolesView: React.FC = () => {
           role: validDbRole
         }, { onConflict: 'user_id,business_id' });
 
-        // Insert one role-assignment row per selected role in canonical business_member_roles table
         for (const rKey of assignedRoles) {
           try {
             await client.from('business_member_roles').insert({
@@ -869,34 +880,7 @@ export const TeamMembersRolesView: React.FC = () => {
       console.warn('[Supabase DB Upsert Notice]:', dbErr);
     }
 
-    // 3. Server API Call
-    try {
-      await fetch('/api/employees', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer user:${user?.id || 'usr-ecometrix-001'}`,
-          'x-business-id': activeBusiness?.id || 'biz-ecometrix-001',
-          'x-user-id': user?.id || 'usr-ecometrix-001',
-          'x-user-role': activeBusiness?.role || 'Owner',
-        },
-        body: JSON.stringify({
-          user_id: authUserId,
-          name: addForm.name.trim(),
-          email: cleanEmail,
-          password: empPassword,
-          temp_password: empPassword,
-          role: addForm.role,
-          roles: assignedRoles,
-          job_title: addForm.jobTitle.trim() || 'Team Member',
-          department: addForm.department.trim() || 'General',
-          phone: addForm.phone.trim(),
-          status: 'Active',
-        })
-      });
-    } catch {}
-
-    // 4. Construct local employee record
+    // 3. Construct local employee record with authoritative Auth UUID
     const newEmp = {
       id: `emp-${Date.now()}`,
       business_id: activeBusiness?.id || 'biz-ecometrix-001',
