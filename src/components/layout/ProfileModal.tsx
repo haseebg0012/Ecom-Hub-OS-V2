@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { X, User, Check, Loader2, AlertCircle } from 'lucide-react';
+import { X, User, Check, Loader2, AlertCircle, ShieldCheck, Lock, Phone, Bell } from 'lucide-react';
 import { useAuth } from '../../lib/auth-context';
+import { getSupabaseClient } from '../../lib/supabase';
 
 interface ProfileModalProps {
   isOpen: boolean;
@@ -8,9 +9,11 @@ interface ProfileModalProps {
 }
 
 export const ProfileModal: React.FC<ProfileModalProps> = ({ isOpen, onClose }) => {
-  const { user, updateProfile, isEmailVerified, resendVerificationEmail } = useAuth();
+  const { user, activeBusiness, updateProfile, isEmailVerified, resendVerificationEmail } = useAuth();
   const [fullName, setFullName] = useState(user?.full_name || '');
   const [avatarUrl, setAvatarUrl] = useState(user?.avatar_url || '');
+  const [phone, setPhone] = useState((user as any)?.phone || '');
+  const [emailNotifications, setEmailNotifications] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [successNotice, setSuccessNotice] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
@@ -27,6 +30,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({ isOpen, onClose }) =
     if (isOpen && user) {
       setFullName(user.full_name || '');
       setAvatarUrl(user.avatar_url || '');
+      setPhone((user as any)?.phone || '');
       setErrorMsg('');
       setSuccessNotice(false);
     }
@@ -71,8 +75,17 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({ isOpen, onClose }) =
     setPasswordNotice(null);
     try {
       const email = user?.email?.trim().toLowerCase();
+      // 1. Authoritative Supabase Auth password update
+      const client = getSupabaseClient();
+      if (client) {
+        const { error: sbErr } = await client.auth.updateUser({
+          password: newPassword,
+        });
+        if (sbErr) throw sbErr;
+      }
+
       if (email) {
-        // Update ecomhub_employees
+        // Update ecomhub_employees cache
         try {
           const rawEmps = localStorage.getItem('ecomhub_employees');
           if (rawEmps) {
@@ -87,7 +100,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({ isOpen, onClose }) =
           }
         } catch {}
 
-        // Update ecomhub_members
+        // Update ecomhub_members cache
         try {
           const rawMem = localStorage.getItem('ecomhub_members');
           if (rawMem) {
@@ -247,6 +260,61 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({ isOpen, onClose }) =
               placeholder="https://..."
               className="w-full px-3 py-2 bg-white border border-[#E2E8F0] rounded-lg text-sm text-[#0F172A] focus:outline-none focus:border-[#4F46E5]"
             />
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-[#0F172A] mb-1.5 flex items-center gap-1.5">
+              <Phone className="w-3.5 h-3.5 text-[#64748B]" />
+              <span>Contact Phone</span>
+            </label>
+            <input
+              type="text"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              placeholder="+1 (555) 000-0000"
+              className="w-full px-3 py-2 bg-white border border-[#E2E8F0] rounded-lg text-sm text-[#0F172A] focus:outline-none focus:border-[#4F46E5]"
+            />
+          </div>
+
+          {/* Preferences */}
+          <div className="bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl p-3 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Bell className="w-4 h-4 text-[#4F46E5]" />
+              <div>
+                <p className="text-xs font-semibold text-[#0F172A]">Email Notifications</p>
+                <p className="text-[11px] text-[#64748B]">Receive task assignments & system updates</p>
+              </div>
+            </div>
+            <input
+              type="checkbox"
+              checked={emailNotifications}
+              onChange={(e) => setEmailNotifications(e.target.checked)}
+              className="rounded border-[#CBD5E1] text-[#4F46E5] focus:ring-[#4F46E5] cursor-pointer"
+            />
+          </div>
+
+          {/* Read-Only System Roles & Organization (Owner Controlled) */}
+          <div className="bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl p-3.5 space-y-2">
+            <div className="flex items-center justify-between text-xs">
+              <span className="font-semibold text-[#0F172A] flex items-center gap-1.5">
+                <ShieldCheck className="w-3.5 h-3.5 text-[#4F46E5]" />
+                <span>Assigned System Roles</span>
+              </span>
+              <span className="text-[10px] text-[#64748B] flex items-center gap-1 bg-white px-2 py-0.5 rounded-full border border-[#E2E8F0]">
+                <Lock className="w-3 h-3 text-[#94A3B8]" />
+                <span>Owner Controlled</span>
+              </span>
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {(activeBusiness?.roles && activeBusiness.roles.length > 0 ? activeBusiness.roles : [activeBusiness?.role || 'Employee']).map((r, i) => (
+                <span key={i} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-semibold bg-[#EEF2FF] text-[#4F46E5] border border-[#C7D2FE]">
+                  {r}
+                </span>
+              ))}
+            </div>
+            <p className="text-[11px] text-[#64748B]">
+              Department access and system permissions cannot be modified by employees. Contact your organization Owner to request role changes.
+            </p>
           </div>
 
           <div className="border-t border-[#E2E8F0] pt-4 mt-4">

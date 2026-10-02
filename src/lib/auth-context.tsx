@@ -50,6 +50,10 @@ interface AuthContextType {
   removeMember: (memberId: string) => Promise<{ success: boolean; error?: string }>;
   refreshData: () => Promise<void>;
   bypassLogin: () => void;
+  mustChangePassword: boolean;
+  setMustChangePassword: (val: boolean) => void;
+  isAccountDisabled: boolean;
+  completePasswordChange: (newPassword: string) => Promise<{ success: boolean; error?: string }>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -200,6 +204,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [viewingSupportBusinessId, setViewingSupportBusinessId] = useState<string | null>(() => {
     return typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('ecomhub_support_view_business_id') : null;
   });
+  const [mustChangePassword, setMustChangePassword] = useState<boolean>(false);
+  const [isAccountDisabled, setIsAccountDisabled] = useState<boolean>(false);
 
   const startSupportWorkspaceView = async (businessId: string) => {
     setViewingSupportBusinessId(businessId);
@@ -235,6 +241,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (session?.user) {
           const isVerified = Boolean(session.user.email_confirmed_at);
           setIsEmailVerified(isVerified);
+
+          const isRootOwner = (session.user.email || '').toLowerCase().trim() === 'haseebg0012@gmail.com';
+          const meta = session.user.user_metadata || {};
+
+          // Employee account status check
+          const accountStatus = meta.status || 'Active';
+          if (!isRootOwner && (accountStatus === 'Inactive' || accountStatus === 'Disabled' || accountStatus === 'Suspended')) {
+            setIsAccountDisabled(true);
+          } else {
+            setIsAccountDisabled(false);
+          }
+
+          // First login password change check
+          if (!isRootOwner && meta.must_change_password === true) {
+            setMustChangePassword(true);
+          } else {
+            setMustChangePassword(false);
+          }
 
           let resolvedFullName = session.user.user_metadata?.full_name;
           let resolvedAvatarUrl = session.user.user_metadata?.avatar_url || null;
@@ -1164,6 +1188,46 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setActiveBusiness(null);
     setBusinesses([]);
     setMembers([]);
+    setMustChangePassword(false);
+    setIsAccountDisabled(false);
+  };
+
+  // Complete First-Login Password Change
+  const completePasswordChange = async (newPassword: string): Promise<{ success: boolean; error?: string }> => {
+    try {
+      const client = await resolveClient();
+      if (client) {
+        const { error } = await client.auth.updateUser({
+          password: newPassword,
+          data: {
+            must_change_password: false,
+          },
+        });
+        if (error) {
+          return { success: false, error: error.message };
+        }
+      }
+
+      if (user?.id) {
+        try {
+          await fetch('/api/auth/password-changed', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer user:${user.id}`,
+              'x-user-id': user.id,
+            },
+          });
+        } catch (e) {
+          console.warn('[password-changed api notice]:', e);
+        }
+      }
+
+      setMustChangePassword(false);
+      return { success: true };
+    } catch (err: any) {
+      return { success: false, error: err.message || 'Failed to update password' };
+    }
   };
 
   // Reset Password
@@ -1722,6 +1786,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         removeMember,
         refreshData: initializeAuth,
         bypassLogin,
+        mustChangePassword,
+        setMustChangePassword,
+        isAccountDisabled,
+        completePasswordChange,
       }}
     >
       {children}

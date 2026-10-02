@@ -514,7 +514,7 @@ export const EmployeesView: React.FC = () => {
             className="inline-flex items-center gap-2 px-4 py-2 bg-[#4F46E5] text-white text-xs font-semibold rounded-lg hover:bg-[#4338CA] transition-colors shadow-xs self-start"
           >
             <Plus className="w-4 h-4" />
-            <span>Add Employee</span>
+            <span>Add / Assign Employee</span>
           </button>
         )}
       </div>
@@ -591,7 +591,7 @@ export const EmployeesView: React.FC = () => {
               className="inline-flex items-center gap-2 px-4 py-2 bg-[#4F46E5] text-white text-xs font-semibold rounded-lg hover:bg-[#4338CA] transition-colors shadow-xs"
             >
               <Plus className="w-4 h-4" />
-              <span>Add Employee</span>
+              <span>Add / Assign Employee</span>
             </button>
           )}
         </div>
@@ -851,7 +851,7 @@ export const EmployeesView: React.FC = () => {
                   {isSubmitting ? (
                     <span>{editingEmployee ? 'Saving Changes...' : 'Adding Employee...'}</span>
                   ) : (
-                    <span>{editingEmployee ? 'Save Changes' : 'Add Employee'}</span>
+                    <span>{editingEmployee ? 'Save Changes' : 'Assign Employee'}</span>
                   )}
                 </button>
               </div>

@@ -233,21 +233,35 @@ export const TeamMembersRolesView: React.FC = () => {
   const [lastCreatedEmployee, setLastCreatedEmployee] = useState<any | null>(null);
   const [loginLinkUrl, setLoginLinkUrl] = useState<string>('');
 
+  // Unassigned Supabase Auth Users State
+  const [unassignedUsers, setUnassignedUsers] = useState<any[]>([]);
+  const [isLoadingUnassigned, setIsLoadingUnassigned] = useState(false);
+  const [showUnassignedModal, setShowUnassignedModal] = useState(false);
+  const [isAssigningFromSupabase, setIsAssigningFromSupabase] = useState(false);
+  const [assigningUserId, setAssigningUserId] = useState<string | null>(null);
+
+  // Password Reset Modal State
+  const [passwordResetEmp, setPasswordResetEmp] = useState<any | null>(null);
+  const [newTempPassword, setNewTempPassword] = useState('NewPass123!');
+  const [showResetPassword, setShowResetPassword] = useState(false);
+  const [isResettingPassword, setIsResettingPassword] = useState(false);
+  const [passwordResetError, setPasswordResetError] = useState<string | null>(null);
+
   // Add Employee Form State
   const [addForm, setAddForm] = useState({
     name: '',
     email: '',
-    password: 'Admin1234!',
     role: 'Sales' as BusinessRole,
     roles: ['Sales'] as string[],
     jobTitle: 'Sales Representative',
     department: 'Sales & Growth',
     phone: '',
+    status: 'Active',
+    notes: '',
     showAddRoles: false,
   });
   const [isSubmittingAdd, setIsSubmittingAdd] = useState(false);
   const [addFormError, setAddFormError] = useState<string | null>(null);
-  const [showAddPassword, setShowAddPassword] = useState(false);
 
   // Edit Employee Form State
   const [editForm, setEditForm] = useState({
@@ -381,6 +395,89 @@ export const TeamMembersRolesView: React.FC = () => {
     }
   };
 
+  // Fetch unassigned Supabase Auth users for Owner assignment
+  const fetchUnassignedUsers = async () => {
+    try {
+      setIsLoadingUnassigned(true);
+      const res = await fetch('/api/admin/unassigned-auth-users', {
+        headers: {
+          'Authorization': `Bearer user:${user?.id || 'usr-ecometrix-001'}`,
+          'x-business-id': activeBusiness?.id || CANONICAL_BIZ_ID,
+          'x-user-id': user?.id || 'usr-ecometrix-001',
+          'x-user-role': activeBusiness?.role || 'Owner',
+        },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data?.unassigned && Array.isArray(data.unassigned)) {
+          setUnassignedUsers(data.unassigned);
+        }
+      }
+    } catch (err) {
+      console.warn('Error fetching unassigned users:', err);
+    } finally {
+      setIsLoadingUnassigned(false);
+    }
+  };
+
+  const handleStartAssignUser = (u: any) => {
+    setIsAssigningFromSupabase(true);
+    setAssigningUserId(u.id);
+    const resolvedName = u.user_metadata?.full_name || u.email?.split('@')[0] || 'Team Member';
+    setAddForm({
+      name: resolvedName,
+      email: u.email,
+      password: '',
+      role: 'Sales',
+      roles: ['Sales'],
+      jobTitle: u.user_metadata?.job_title || 'Sales Representative',
+      department: u.user_metadata?.department || 'Sales & Growth',
+      phone: '',
+      showAddRoles: false,
+    });
+    setAddFormError(null);
+    setShowUnassignedModal(false);
+    setIsAddModalOpen(true);
+  };
+
+  const handleResetPasswordSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!passwordResetEmp) return;
+    if (!newTempPassword || newTempPassword.length < 6) {
+      setPasswordResetError('Password must be at least 6 characters.');
+      return;
+    }
+
+    setIsResettingPassword(true);
+    setPasswordResetError(null);
+    try {
+      const res = await fetch(`/api/employees/${passwordResetEmp.id}/reset-password`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer user:${user?.id || 'usr-ecometrix-001'}`,
+          'x-business-id': activeBusiness?.id || CANONICAL_BIZ_ID,
+          'x-user-id': user?.id || 'usr-ecometrix-001',
+          'x-user-role': activeBusiness?.role || 'Owner',
+        },
+        body: JSON.stringify({ new_password: newTempPassword }),
+      });
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || 'Failed to reset password in Supabase Auth');
+      }
+
+      setStatusMessage(`✓ Temporary password reset successfully for ${passwordResetEmp.name}!`);
+      setTimeout(() => setStatusMessage(null), 4000);
+      setPasswordResetEmp(null);
+    } catch (err: any) {
+      setPasswordResetError(err.message || 'Error resetting password');
+    } finally {
+      setIsResettingPassword(false);
+    }
+  };
+
   // Load employees & matrices
   useEffect(() => {
     try {
@@ -444,6 +541,7 @@ export const TeamMembersRolesView: React.FC = () => {
 
     loadAuthoritativePermissions();
     fetchEmployees();
+    fetchUnassignedUsers();
   }, [activeBusiness?.id]);
 
   const saveEmployeesToStorage = (updated: any[]) => {
@@ -452,16 +550,26 @@ export const TeamMembersRolesView: React.FC = () => {
     window.dispatchEvent(new Event('ecomhub_employees_updated'));
   };
 
-  // Sync employees on external updates (e.g. login/logout)
+  // Sync employees and unassigned users on external updates or window focus
   useEffect(() => {
     const handleSync = () => {
       try {
         const raw = localStorage.getItem('ecomhub_employees');
         if (raw) setEmployees(JSON.parse(raw));
       } catch {}
+      fetchUnassignedUsers();
     };
+
+    const handleFocus = () => {
+      fetchUnassignedUsers();
+    };
+
     window.addEventListener('ecomhub_employees_updated', handleSync);
-    return () => window.removeEventListener('ecomhub_employees_updated', handleSync);
+    window.addEventListener('focus', handleFocus);
+    return () => {
+      window.removeEventListener('ecomhub_employees_updated', handleSync);
+      window.removeEventListener('focus', handleFocus);
+    };
   }, []);
 
   const handleTogglePermission = async (modId: string, action: string) => {
@@ -776,19 +884,13 @@ export const TeamMembersRolesView: React.FC = () => {
   const handleAddEmployeeSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setAddFormError(null);
-    if (!addForm.name.trim() || !addForm.email.trim() || !addForm.password.trim()) {
-      setAddFormError('Please fill in Name, Email, and Temporary Password.');
+    if (!addForm.name.trim()) {
+      setAddFormError('Please enter Full Name.');
       return;
     }
 
-    const cleanEmail = addForm.email.trim().toLowerCase();
-    if (!cleanEmail.includes('@') || !cleanEmail.includes('.')) {
-      setAddFormError('Please enter a valid email address.');
-      return;
-    }
-
-    if (employees.some((emp) => emp.email?.toLowerCase() === cleanEmail)) {
-      setAddFormError(`An employee with email "${cleanEmail}" is already registered.`);
+    if (!isAssigningFromSupabase || !assigningUserId) {
+      setAddFormError('Direct user creation is disabled. Please create the user in Supabase Authentication first, then assign them via Unassigned Users.');
       return;
     }
 
@@ -797,12 +899,10 @@ export const TeamMembersRolesView: React.FC = () => {
     const assignedRoles = addForm.roles.includes(addForm.role)
       ? addForm.roles
       : [addForm.role, ...addForm.roles];
-    const empPassword = addForm.password.trim() || 'Admin1234!';
-    let authUserId = '';
 
-    // 1. Authoritative Backend Employee Creation (runs Supabase Admin createUser and relational inserts)
+    // Assignment Flow for pre-existing Supabase Auth user
     try {
-      const empRes = await fetch('/api/employees', {
+      const assignRes = await fetch('/api/admin/assign-employee', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -812,172 +912,37 @@ export const TeamMembersRolesView: React.FC = () => {
           'x-user-role': activeBusiness?.role || 'Owner',
         },
         body: JSON.stringify({
+          user_id: assigningUserId,
           name: addForm.name.trim(),
-          email: cleanEmail,
-          password: empPassword,
-          temp_password: empPassword,
           role: addForm.role,
           roles: assignedRoles,
           job_title: addForm.jobTitle.trim() || 'Team Member',
           department: addForm.department.trim() || 'General',
           phone: addForm.phone.trim(),
-          status: 'Active',
-        })
+          status: addForm.status || 'Active',
+          notes: addForm.notes?.trim() || '',
+        }),
       });
 
-      if (!empRes.ok) {
-        const errData = await empRes.json().catch(() => ({}));
-        setAddFormError(errData.error || 'Failed to create employee account.');
+      if (!assignRes.ok) {
+        const errData = await assignRes.json().catch(() => ({}));
+        setAddFormError(errData.error || 'Failed to assign employee from Supabase Auth.');
         setIsSubmittingAdd(false);
         return;
       }
 
-      const resData = await empRes.json();
-      if (resData?.employee?.user_id) {
-        authUserId = resData.employee.user_id;
-      }
-    } catch (netErr: any) {
-      console.warn('[Add Employee API Network Notice]:', netErr);
+      setIsSubmittingAdd(false);
+      setIsAddModalOpen(false);
+      setIsAssigningFromSupabase(false);
+      setAssigningUserId(null);
+      setStatusMessage(`✓ Employee ${addForm.name} successfully assigned! Temporary password active; must change on first login.`);
+      setTimeout(() => setStatusMessage(null), 4500);
+      fetchEmployees();
+      fetchUnassignedUsers();
+    } catch (assignErr: any) {
+      setAddFormError(`Assignment error: ${assignErr.message}`);
+      setIsSubmittingAdd(false);
     }
-
-    if (!authUserId) {
-      authUserId = typeof crypto !== 'undefined' && crypto.randomUUID
-        ? crypto.randomUUID()
-        : `usr-emp-${Date.now()}`;
-    }
-
-    // 2. Direct client mirror if client is connected directly
-    try {
-      const client = getSupabaseClient();
-      if (client) {
-        await client.from('profiles').upsert({
-          id: authUserId,
-          email: cleanEmail,
-          full_name: addForm.name.trim(),
-          updated_at: new Date().toISOString()
-        }, { onConflict: 'id' });
-
-        const validDbRole = ['Owner', 'Admin', 'Manager', 'Finance', 'Sales', 'Viewer'].includes(addForm.role)
-          ? addForm.role
-          : 'Employee';
-
-        await client.from('business_members').upsert({
-          user_id: authUserId,
-          business_id: activeBusiness?.id || CANONICAL_BIZ_ID,
-          role: validDbRole
-        }, { onConflict: 'user_id,business_id' });
-
-        for (const rKey of assignedRoles) {
-          try {
-            await client.from('business_member_roles').insert({
-              user_id: authUserId,
-              business_id: activeBusiness?.id || CANONICAL_BIZ_ID,
-              role_key: rKey,
-              created_by: user?.id || 'usr-ecometrix-001',
-            });
-          } catch {}
-        }
-      }
-    } catch (dbErr) {
-      console.warn('[Supabase DB Upsert Notice]:', dbErr);
-    }
-
-    // 3. Construct local employee record with authoritative Auth UUID
-    const newEmp = {
-      id: `emp-${Date.now()}`,
-      business_id: activeBusiness?.id || CANONICAL_BIZ_ID,
-      user_id: authUserId,
-      name: addForm.name.trim(),
-      email: cleanEmail,
-      password: empPassword,
-      temp_password: empPassword,
-      role: addForm.role,
-      roles: assignedRoles,
-      jobTitle: addForm.jobTitle.trim() || 'Team Member',
-      department: addForm.department.trim() || 'General',
-      phone: addForm.phone.trim(),
-      status: 'Active',
-      lastLogin: 'Never',
-      performedTasksCount: 0,
-      created_at: new Date().toISOString()
-    };
-
-    const updated = [newEmp, ...employees];
-    saveEmployeesToStorage(updated);
-
-    // 5. Update local member caches
-    try {
-      const rawMem = localStorage.getItem('ecomhub_members');
-      const allMem = rawMem ? JSON.parse(rawMem) : [];
-      allMem.push({
-        id: `mem-${newEmp.id}`,
-        user_id: newEmp.user_id,
-        business_id: newEmp.business_id,
-        role: newEmp.role,
-        roles: newEmp.roles,
-        password: newEmp.password,
-        created_at: newEmp.created_at,
-        profile: {
-          id: newEmp.user_id,
-          email: newEmp.email,
-          full_name: newEmp.name,
-        }
-      });
-      localStorage.setItem('ecomhub_members', JSON.stringify(allMem));
-
-      const rawReg = localStorage.getItem('ecomhub_registered_users');
-      const regUsers = rawReg ? JSON.parse(rawReg) : [];
-      const regIdx = regUsers.findIndex((u: any) => u.email?.toLowerCase() === cleanEmail);
-      const regEntry = {
-        id: newEmp.user_id,
-        email: cleanEmail,
-        password: newEmp.password,
-        full_name: newEmp.name,
-        role: newEmp.role,
-        roles: newEmp.roles,
-        business_name: activeBusiness?.name || 'Ecometrix Hub',
-        created_at: newEmp.created_at,
-      };
-      if (regIdx >= 0) regUsers[regIdx] = regEntry;
-      else regUsers.push(regEntry);
-      localStorage.setItem('ecomhub_registered_users', JSON.stringify(regUsers));
-
-      syncEmployeeToLeadAgent({
-        name: newEmp.name,
-        email: newEmp.email,
-        phone: newEmp.phone,
-        business_id: newEmp.business_id,
-        role: newEmp.role,
-        roles: newEmp.roles,
-      });
-    } catch {}
-
-    try {
-      inviteMember(cleanEmail, newEmp.name, addForm.role);
-    } catch {}
-
-    const currentOrigin = typeof window !== 'undefined' ? window.location.origin : '';
-    const defaultBase = currentOrigin.includes('localhost') || currentOrigin.includes('run.app')
-      ? 'https://ecomhubsystem.vercel.app'
-      : currentOrigin;
-    setLoginLinkUrl(`${defaultBase}/login`);
-    setLastCreatedEmployee(newEmp);
-
-    setIsAddModalOpen(false);
-    setIsSubmittingAdd(false);
-    setAddForm({
-      name: '',
-      email: '',
-      password: 'Admin1234!',
-      role: 'Sales',
-      roles: ['Sales'],
-      jobTitle: 'Sales Representative',
-      department: 'Sales & Growth',
-      phone: '',
-      showAddRoles: false,
-    });
-    setStatusMessage(`Employee ${newEmp.name} registered successfully with temporary password!`);
-    setTimeout(() => setStatusMessage(null), 4000);
   };
 
   const handleOpenEdit = (emp: any) => {
@@ -1275,16 +1240,59 @@ export const TeamMembersRolesView: React.FC = () => {
             </div>
           )}
           {canManageTeam && (
-            <button
-              onClick={() => setIsAddModalOpen(true)}
-              className="inline-flex items-center gap-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold rounded-xl shadow-md shadow-indigo-600/30 transition-all cursor-pointer"
-            >
-              <UserPlus className="w-4 h-4" />
-              <span>Add Employee</span>
-            </button>
+            <>
+              <button
+                onClick={() => {
+                  fetchUnassignedUsers();
+                  setShowUnassignedModal(true);
+                }}
+                className="inline-flex items-center gap-2 px-3.5 py-2.5 bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30 text-xs font-semibold rounded-xl shadow-xs transition-all cursor-pointer"
+                title="View unassigned Supabase Auth users"
+              >
+                <Shield className="w-4 h-4 text-amber-400" />
+                <span>Unassigned Users</span>
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-400 text-slate-950">
+                  {unassignedUsers.length}
+                </span>
+              </button>
+
+              <button
+                onClick={() => {
+                  fetchUnassignedUsers();
+                  setShowUnassignedModal(true);
+                }}
+                className="inline-flex items-center gap-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold rounded-xl shadow-md shadow-indigo-600/30 transition-all cursor-pointer"
+              >
+                <UserPlus className="w-4 h-4" />
+                <span>Add / Assign Employee</span>
+                {unassignedUsers.length > 0 && (
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-400 text-slate-950">
+                    {unassignedUsers.length}
+                  </span>
+                )}
+              </button>
+            </>
           )}
         </div>
       </div>
+
+      {/* Unassigned Users Notification Banner for Owner */}
+      {(user?.role === 'Owner' || activeBusiness?.role === 'Owner' || isOwner) && unassignedUsers.length > 0 && (
+        <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-3.5 flex items-center justify-between gap-3 text-xs text-amber-300">
+          <div className="flex items-center gap-2.5">
+            <AlertCircle className="w-4 h-4 text-amber-400 shrink-0" />
+            <span>
+              Found <strong>{unassignedUsers.length}</strong> unassigned Supabase Auth user(s) ready to be assigned as EcomHub employees.
+            </span>
+          </div>
+          <button
+            onClick={() => setShowUnassignedModal(true)}
+            className="px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-semibold rounded-lg text-xs transition-colors shrink-0 cursor-pointer"
+          >
+            Review & Assign
+          </button>
+        </div>
+      )}
 
       {/* Search & Status Filter Bar */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-[#141B2D] border border-slate-800 p-4 rounded-xl shadow-sm">
@@ -1660,6 +1668,21 @@ export const TeamMembersRolesView: React.FC = () => {
                               <Key className="w-3.5 h-3.5 text-indigo-400" />
                               <span>Login Info</span>
                             </button>
+                            {(user?.role === 'Owner' || activeBusiness?.role === 'Owner') && emp.role !== 'Owner' && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setPasswordResetEmp(emp);
+                                  setNewTempPassword('NewPass123!');
+                                  setPasswordResetError(null);
+                                }}
+                                className="px-2.5 py-1.5 bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 text-xs font-medium rounded-lg transition-colors flex items-center gap-1 border border-amber-500/20"
+                                title="Reset Temporary Password via Supabase Admin API"
+                              >
+                                <Lock className="w-3.5 h-3.5 text-amber-400" />
+                                <span>Reset Pass</span>
+                              </button>
+                            )}
                             {canManageTeam && (
                               <button
                                 onClick={() => handleOpenEdit(emp)}
@@ -1700,8 +1723,14 @@ export const TeamMembersRolesView: React.FC = () => {
                   <UserPlus className="w-5 h-5" />
                 </div>
                 <div>
-                  <h3 className="text-base font-bold text-white">Add New Team Employee</h3>
-                  <p className="text-xs text-slate-400">Instantly create account, temporary password & assign multi-roles</p>
+                  <h3 className="text-base font-bold text-white">
+                    {isAssigningFromSupabase ? 'Assign Existing Supabase User' : 'Add New Team Employee'}
+                  </h3>
+                  <p className="text-xs text-slate-400">
+                    {isAssigningFromSupabase
+                      ? 'Link existing Supabase Auth identity to EcomHub OS & assign roles'
+                      : 'Instantly create account, temporary password & assign multi-roles'}
+                  </p>
                 </div>
               </div>
               <button
@@ -1740,57 +1769,27 @@ export const TeamMembersRolesView: React.FC = () => {
                   <input
                     type="email"
                     required
+                    readOnly={isAssigningFromSupabase}
                     placeholder="alex@company.com"
                     value={addForm.email}
                     onChange={(e) => setAddForm({ ...addForm, email: e.target.value })}
-                    className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-lg text-xs text-white placeholder-slate-500 focus:outline-hidden focus:border-indigo-500"
+                    className={`w-full px-3 py-2 border rounded-lg text-xs placeholder-slate-500 focus:outline-hidden ${
+                      isAssigningFromSupabase
+                        ? 'bg-slate-800/80 border-slate-700 text-slate-300 cursor-not-allowed'
+                        : 'bg-slate-900 border-slate-800 text-white focus:border-indigo-500'
+                    }`}
                   />
                 </div>
               </div>
 
-              {/* Temporary Password with Generator & Eye Toggle */}
-              <div>
-                <div className="flex items-center justify-between mb-1.5">
-                  <label className="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
-                    <Lock className="w-3.5 h-3.5 text-indigo-400" />
-                    <span>Temporary Password *</span>
-                  </label>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789!@#$%';
-                      let randPass = 'Emp';
-                      for (let i = 0; i < 6; i++) {
-                        randPass += chars.charAt(Math.floor(Math.random() * chars.length));
-                      }
-                      randPass += '!1';
-                      setAddForm({ ...addForm, password: randPass });
-                    }}
-                    className="text-[11px] text-indigo-400 hover:text-indigo-300 flex items-center gap-1 font-medium transition-colors"
-                  >
-                    <RefreshCw className="w-3 h-3" />
-                    <span>Generate Random</span>
-                  </button>
+              <div className="p-3.5 bg-indigo-500/10 border border-indigo-500/20 rounded-xl text-indigo-300 text-xs flex items-start gap-2.5">
+                <ShieldCheck className="w-4 h-4 text-indigo-400 shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-semibold text-white">Pre-authenticated via Supabase Authentication</p>
+                  <p className="text-[11px] text-slate-400 mt-0.5 leading-relaxed">
+                    User UUID: <span className="font-mono text-slate-300">{assigningUserId}</span>. The employee will log in using their Supabase credentials and will be prompted to set their permanent password on first login.
+                  </p>
                 </div>
-                <div className="relative">
-                  <input
-                    type={showAddPassword ? 'text' : 'password'}
-                    required
-                    value={addForm.password}
-                    onChange={(e) => setAddForm({ ...addForm, password: e.target.value })}
-                    className="w-full pl-3 pr-10 py-2 bg-slate-900 border border-slate-800 rounded-lg text-xs font-mono text-indigo-300 focus:outline-hidden focus:border-indigo-500"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowAddPassword(!showAddPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition-colors"
-                  >
-                    {showAddPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-                  </button>
-                </div>
-                <p className="text-[11px] text-slate-500 mt-1">
-                  Employee logs in directly with this temporary password. Email verification OTP is disabled.
-                </p>
               </div>
 
               {/* Primary Role & Multi-Role Selection */}
@@ -1921,6 +1920,41 @@ export const TeamMembersRolesView: React.FC = () => {
                 </div>
               </div>
 
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1.5">Employee Status</label>
+                  <select
+                    value={addForm.status}
+                    onChange={(e) => setAddForm({ ...addForm, status: e.target.value })}
+                    className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-lg text-xs text-white focus:outline-hidden focus:border-indigo-500"
+                  >
+                    <option value="Active">Active (Full Access)</option>
+                    <option value="Inactive">Inactive / Suspended (Blocked)</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1.5">Phone Number</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. +92 300 1234567"
+                    value={addForm.phone}
+                    onChange={(e) => setAddForm({ ...addForm, phone: e.target.value })}
+                    className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-lg text-xs text-white placeholder-slate-500 focus:outline-hidden focus:border-indigo-500"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1.5">Role Description / Notes</label>
+                <textarea
+                  rows={2}
+                  placeholder="Responsibilities, notes, or assigned department details..."
+                  value={addForm.notes}
+                  onChange={(e) => setAddForm({ ...addForm, notes: e.target.value })}
+                  className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-lg text-xs text-white placeholder-slate-500 focus:outline-hidden focus:border-indigo-500 resize-none"
+                />
+              </div>
+
               <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-800">
                 <button
                   type="button"
@@ -1928,7 +1962,7 @@ export const TeamMembersRolesView: React.FC = () => {
                     setIsAddModalOpen(false);
                     setAddFormError(null);
                   }}
-                  className="px-4 py-2 border border-slate-800 text-xs font-medium text-slate-300 rounded-xl hover:bg-slate-800 transition-colors"
+                  className="px-4 py-2 border border-slate-800 text-xs font-medium text-slate-300 rounded-xl hover:bg-slate-800 transition-colors cursor-pointer"
                 >
                   Cancel
                 </button>
@@ -1940,12 +1974,12 @@ export const TeamMembersRolesView: React.FC = () => {
                   {isSubmittingAdd ? (
                     <>
                       <Loader2 className="w-4 h-4 animate-spin" />
-                      <span>Creating Account...</span>
+                      <span>Assigning Employee...</span>
                     </>
                   ) : (
                     <>
                       <UserPlus className="w-4 h-4" />
-                      <span>Add Employee</span>
+                      <span>Assign Employee & Activate</span>
                     </>
                   )}
                 </button>
@@ -2309,6 +2343,215 @@ export const TeamMembersRolesView: React.FC = () => {
                 Done
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* UNASSIGNED SUPABASE AUTH USERS MODAL */}
+      {showUnassignedModal && (
+        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-[#141B2D] border border-slate-800 rounded-2xl max-w-2xl w-full p-6 shadow-2xl space-y-5 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-amber-500/10 text-amber-400 flex items-center justify-center border border-amber-500/20">
+                  <Shield className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-white">Unassigned Supabase Auth Users</h3>
+                  <p className="text-xs text-slate-400">Users created in Supabase Dashboard waiting to be linked as EcomHub employees</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowUnassignedModal(false)}
+                className="text-slate-400 hover:text-white p-1 rounded-lg"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {isLoadingUnassigned ? (
+              <div className="py-12 flex flex-col items-center justify-center gap-2 text-slate-400 text-xs">
+                <Loader2 className="w-6 h-6 animate-spin text-indigo-400" />
+                <span>Checking Supabase Authentication users...</span>
+              </div>
+            ) : unassignedUsers.length === 0 ? (
+              <div className="py-10 text-center space-y-3">
+                <div className="w-12 h-12 rounded-2xl bg-amber-500/10 text-amber-400 border border-amber-500/20 flex items-center justify-center mx-auto">
+                  <Shield className="w-6 h-6" />
+                </div>
+                <div className="space-y-1">
+                  <p className="text-sm font-semibold text-white">No unassigned Supabase users found.</p>
+                  <p className="text-xs text-slate-400 max-w-md mx-auto">
+                    Create the user in Supabase Authentication first (Supabase Dashboard → Authentication → Users → Add User). Once created, click "Refresh List" below to assign them.
+                  </p>
+                </div>
+                <div className="pt-2">
+                  <button
+                    type="button"
+                    onClick={fetchUnassignedUsers}
+                    disabled={isLoadingUnassigned}
+                    className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold rounded-xl shadow-xs transition-colors cursor-pointer"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${isLoadingUnassigned ? 'animate-spin' : ''}`} />
+                    <span>Check Again / Refresh</span>
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <p className="text-xs text-slate-400">
+                  The following accounts were detected in Supabase Auth but are not yet members of your organization:
+                </p>
+                <div className="divide-y divide-slate-800/80 border border-slate-800 rounded-xl bg-slate-900/60 overflow-hidden">
+                  {unassignedUsers.map((u) => (
+                    <div key={u.id} className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-slate-800/40 transition-colors">
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <span className="font-semibold text-sm text-white">{u.email}</span>
+                          {u.email_confirmed_at && (
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                              Confirmed
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-3 text-[11px] text-slate-400">
+                          <span className="font-mono text-slate-500">UUID: {u.id}</span>
+                          <span>•</span>
+                          <span>Created: {new Date(u.created_at).toLocaleDateString()}</span>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleStartAssignUser(u)}
+                        className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold rounded-xl shadow-xs transition-colors shrink-0 cursor-pointer"
+                      >
+                        <UserPlus className="w-3.5 h-3.5" />
+                        <span>Assign Employee</span>
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div className="flex items-center justify-between pt-3 border-t border-slate-800 text-xs text-slate-400">
+              <button
+                type="button"
+                onClick={fetchUnassignedUsers}
+                disabled={isLoadingUnassigned}
+                className="flex items-center gap-1.5 text-indigo-400 hover:text-indigo-300 font-medium cursor-pointer"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${isLoadingUnassigned ? 'animate-spin' : ''}`} />
+                <span>Refresh List</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowUnassignedModal(false)}
+                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl transition-colors cursor-pointer"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* RESET TEMPORARY PASSWORD MODAL */}
+      {passwordResetEmp && (
+        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-[#141B2D] border border-slate-800 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-amber-500/10 text-amber-400 flex items-center justify-center border border-amber-500/20">
+                  <Lock className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-white">Reset Temporary Password</h3>
+                  <p className="text-xs text-slate-400">{passwordResetEmp.name} ({passwordResetEmp.email})</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setPasswordResetEmp(null)}
+                className="text-slate-400 hover:text-white p-1 rounded-lg"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {passwordResetError && (
+              <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-xl text-red-300 text-xs flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />
+                <span>{passwordResetError}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleResetPasswordSubmit} className="space-y-4">
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-xs font-semibold text-slate-300">New Temporary Password *</label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789!@#$%';
+                      let rand = 'Reset';
+                      for (let i = 0; i < 5; i++) rand += chars.charAt(Math.floor(Math.random() * chars.length));
+                      rand += '!1';
+                      setNewTempPassword(rand);
+                    }}
+                    className="text-[11px] text-amber-400 hover:text-amber-300 flex items-center gap-1 font-medium transition-colors cursor-pointer"
+                  >
+                    <RefreshCw className="w-3 h-3" />
+                    <span>Generate</span>
+                  </button>
+                </div>
+                <div className="relative">
+                  <input
+                    type={showResetPassword ? 'text' : 'password'}
+                    required
+                    value={newTempPassword}
+                    onChange={(e) => setNewTempPassword(e.target.value)}
+                    className="w-full pl-3 pr-10 py-2 bg-slate-900 border border-slate-800 rounded-lg text-xs font-mono text-amber-300 focus:outline-hidden focus:border-amber-500"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowResetPassword(!showResetPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300"
+                  >
+                    {showResetPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                  </button>
+                </div>
+                <p className="text-[11px] text-slate-500 mt-1">
+                  Updates password directly in Supabase Authentication using the server-side Admin API.
+                </p>
+              </div>
+
+              <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setPasswordResetEmp(null)}
+                  className="px-4 py-2 border border-slate-800 text-xs font-medium text-slate-300 rounded-xl hover:bg-slate-800"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isResettingPassword}
+                  className="px-4 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-semibold rounded-xl shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                >
+                  {isResettingPassword ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <span>Updating...</span>
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      <span>Update Password</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

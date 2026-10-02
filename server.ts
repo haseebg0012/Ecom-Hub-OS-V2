@@ -3807,6 +3807,407 @@ app.post('/api/invitations/complete', async (req: Request, res: Response) => {
   });
 });
 
+// ==============================================================================
+// UNASSIGNED SUPABASE AUTH USERS & MANUAL ASSIGNMENT FLOW
+// ==============================================================================
+
+/**
+ * GET /api/admin/unassigned-auth-users
+ * Returns Supabase Auth users that do not yet have a record in public.business_members.
+ * Strictly Owner-only. Never exposes sensitive keys or passwords.
+ */
+app.get(
+  '/api/admin/unassigned-auth-users',
+  requireServerAuth,
+  async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const isOwner = req.userRole === 'Owner' || req.isPlatformOwner;
+      if (!isOwner) {
+        res.status(403).json({ error: 'Forbidden: Only the Owner can inspect unassigned authentication users.' });
+        return;
+      }
+
+      const adminClient = getSupabaseAdmin();
+      const db = loadDatabase();
+      const assignedUserIds = new Set<string>();
+
+      // 1. Gather all assigned user_ids from local business_members
+      (db.business_members || []).forEach((m: any) => {
+        if (m.user_id) assignedUserIds.add(m.user_id);
+      });
+
+      // 2. Gather from remote Supabase business_members if connected
+      if (adminClient) {
+        try {
+          const { data: remoteMembers } = await adminClient.from('business_members').select('user_id');
+          if (remoteMembers) {
+            remoteMembers.forEach((m: any) => {
+              if (m.user_id) assignedUserIds.add(m.user_id);
+            });
+          }
+        } catch (e) {
+          console.warn('[Remote business_members fetch warning]:', e);
+        }
+      }
+
+      // 3. Fetch Auth users
+      let authUsers: any[] = [];
+      if (adminClient) {
+        try {
+          const { data: usersData, error: usersErr } = await adminClient.auth.admin.listUsers({ page: 1, perPage: 1000 });
+          if (!usersErr && usersData?.users) {
+            authUsers = usersData.users;
+          }
+        } catch (e) {
+          console.warn('[Remote listUsers warning]:', e);
+        }
+      }
+
+      // If remote returned none or not configured, check local auth users
+      if (authUsers.length === 0 && Array.isArray(db.auth_users)) {
+        authUsers = db.auth_users;
+      }
+
+      const OWNER_EMAIL = 'haseebg0012@gmail.com';
+      const unassigned = authUsers
+        .filter((u: any) => {
+          const email = (u.email || '').toLowerCase().trim();
+          if (email === OWNER_EMAIL) return false;
+          if (assignedUserIds.has(u.id)) return false;
+          return true;
+        })
+        .map((u: any) => ({
+          id: u.id,
+          email: u.email,
+          created_at: u.created_at,
+          email_confirmed_at: u.email_confirmed_at || null,
+          user_metadata: {
+            full_name: u.user_metadata?.full_name || u.user_metadata?.name || '',
+            job_title: u.user_metadata?.job_title || '',
+            department: u.user_metadata?.department || '',
+          },
+        }));
+
+      res.json({ unassigned });
+    } catch (err: any) {
+      console.error('[Unassigned Auth Users Error]:', err);
+      res.status(500).json({ error: `Failed to fetch unassigned auth users: ${err.message}` });
+    }
+  }
+);
+
+/**
+ * POST /api/admin/assign-employee
+ * Links an EXISTING Supabase Auth user to EcomHub OS as an active employee.
+ * Strictly Owner-only. Does NOT call auth.admin.createUser().
+ */
+app.post(
+  '/api/admin/assign-employee',
+  requireServerAuth,
+  async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const isOwner = req.userRole === 'Owner' || req.isPlatformOwner;
+      if (!isOwner) {
+        res.status(403).json({ error: 'Forbidden: Only the Owner can assign authentication users.' });
+        return;
+      }
+
+      const {
+        user_id,
+        name,
+        job_title,
+        department,
+        role,
+        roles,
+        phone,
+        status,
+        notes,
+      } = req.body;
+
+      if (!user_id) {
+        res.status(400).json({ error: 'user_id (Supabase Auth UUID) is required for assignment.' });
+        return;
+      }
+
+      const rawFullName = (name || '').trim();
+      if (!rawFullName) {
+        res.status(400).json({ error: 'Full name is required for assignment.' });
+        return;
+      }
+
+      const adminClient = getSupabaseAdmin();
+      const rawBizId = req.activeBusinessId || (req.headers['x-business-id'] as string) || '';
+      const targetBizUuid = await resolveCanonicalBusinessUuid(adminClient, rawBizId);
+
+      let authUserEmail = '';
+      if (adminClient) {
+        try {
+          const { data: authUserData, error: authUserErr } = await adminClient.auth.admin.getUserById(user_id);
+          if (authUserErr || !authUserData?.user) {
+            res.status(404).json({ error: `Supabase Auth user not found with ID ${user_id}. Please create user in Supabase first.` });
+            return;
+          }
+          authUserEmail = authUserData.user.email || '';
+        } catch (e: any) {
+          res.status(500).json({ error: `Failed to verify auth user in Supabase: ${e.message}` });
+          return;
+        }
+      } else {
+        const db = loadDatabase();
+        const localAuth = (db.auth_users || []).find((u: any) => u.id === user_id);
+        authUserEmail = localAuth?.email || '';
+      }
+
+      const primaryRole = role || (Array.isArray(roles) && roles.length > 0 ? roles[0] : 'Employee');
+      const assignedRoles: string[] = Array.isArray(roles) && roles.length > 0
+        ? (roles.includes(primaryRole) ? roles : [primaryRole, ...roles])
+        : [primaryRole];
+
+      // 1. Update Supabase Auth user metadata (no password change, enforce must_change_password = true)
+      if (adminClient) {
+        try {
+          await adminClient.auth.admin.updateUserById(user_id, {
+            user_metadata: {
+              full_name: rawFullName,
+              role: primaryRole,
+              roles: assignedRoles,
+              department: department || 'General',
+              job_title: job_title || 'Team Member',
+              business_id: targetBizUuid,
+              status: status || 'Active',
+              must_change_password: true,
+            },
+          });
+
+          // 2. Upsert public.profiles
+          const { error: profErr } = await adminClient.from('profiles').upsert({
+            id: user_id,
+            email: authUserEmail,
+            full_name: rawFullName,
+            updated_at: new Date().toISOString(),
+          }, { onConflict: 'id' });
+          if (profErr) throw new Error(`Profile sync failed: ${profErr.message}`);
+
+          // 3. Upsert public.business_members
+          const dbValidRole = resolveDbRole(primaryRole);
+          const { error: bmErr } = await adminClient.from('business_members').upsert({
+            user_id: user_id,
+            business_id: targetBizUuid,
+            role: dbValidRole,
+          }, { onConflict: 'user_id,business_id' });
+          if (bmErr) throw new Error(`Business member link failed: ${bmErr.message}`);
+
+          // 4. Upsert public.business_member_roles
+          try {
+            for (const rKey of assignedRoles) {
+              const canonicalKey = rKey.toLowerCase().replace(/\s+/g, '_');
+              await adminClient.from('business_member_roles').upsert({
+                user_id: user_id,
+                business_id: targetBizUuid,
+                role_key: canonicalKey,
+                created_by: req.userId,
+              });
+            }
+          } catch (rErr) {
+            console.warn('[business_member_roles notice]:', rErr);
+          }
+        } catch (adminErr: any) {
+          console.error('[Assign Employee Error]:', adminErr);
+          res.status(500).json({ error: `Assignment failed in Supabase: ${adminErr.message}` });
+          return;
+        }
+      }
+
+      // 5. Synchronize local canonical DB
+      upsertProfile({
+        id: user_id,
+        email: authUserEmail,
+        full_name: rawFullName,
+        updated_at: new Date().toISOString(),
+      });
+
+      const bm = upsertBusinessMember({
+        user_id: user_id,
+        business_id: targetBizUuid,
+        role: primaryRole,
+      });
+
+      assignedRoles.forEach((rKey) => {
+        const canonicalKey = rKey.toLowerCase().replace(/\s+/g, '_');
+        insertMemberRole(user_id, targetBizUuid, canonicalKey, req.userId, bm.id);
+      });
+
+      const newEmp = {
+        id: `emp-${bm.id || Date.now()}`,
+        business_id: targetBizUuid,
+        user_id: user_id,
+        first_name: rawFullName.split(' ')[0] || '',
+        last_name: rawFullName.split(' ').slice(1).join(' ') || '',
+        name: rawFullName,
+        email: authUserEmail,
+        role: primaryRole,
+        roles: assignedRoles,
+        department: department || 'General',
+        job_title: job_title || 'Team Member',
+        employment_type: 'Full-Time',
+        phone: phone || '',
+        notes: notes || '',
+        status: status || 'Active',
+        must_change_password: true,
+        created_at: new Date().toISOString(),
+        last_login: null,
+      };
+
+      if (!STORE.employees) STORE.employees = [];
+      const existingEmpIdx = STORE.employees.findIndex((e) => e.user_id === user_id);
+      if (existingEmpIdx >= 0) {
+        STORE.employees[existingEmpIdx] = newEmp;
+      } else {
+        STORE.employees.push(newEmp);
+      }
+
+      DEMO_MEMBERS.push({
+        user_id: user_id,
+        business_id: targetBizUuid,
+        role: primaryRole as BusinessRole,
+      });
+
+      if (!STORE.activityLogs) STORE.activityLogs = [];
+      STORE.activityLogs.unshift({
+        id: `log-${Date.now()}`,
+        business_id: targetBizUuid,
+        action: 'EMPLOYEE_ASSIGNED',
+        description: `Assigned existing Supabase user ${rawFullName} (${authUserEmail}) as ${primaryRole}`,
+        created_at: new Date().toISOString(),
+      });
+
+      res.status(201).json({
+        success: true,
+        employee: newEmp,
+        message: `Employee ${rawFullName} (${authUserEmail}) successfully linked and assigned!`
+      });
+    } catch (err: any) {
+      console.error('[Assign Employee Error]:', err);
+      res.status(500).json({ error: `Server error during employee assignment: ${err.message}` });
+    }
+  }
+);
+
+/**
+ * POST /api/employees/:id/reset-password
+ * Allows Owner to reset an assigned employee's temporary password in Supabase Auth.
+ */
+app.post(
+  '/api/employees/:id/reset-password',
+  requireServerAuth,
+  async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const isOwner = req.userRole === 'Owner' || req.isPlatformOwner;
+      if (!isOwner) {
+        res.status(403).json({ error: 'Forbidden: Only the Owner can reset employee passwords.' });
+        return;
+      }
+
+      const { new_password } = req.body;
+      if (!new_password || typeof new_password !== 'string' || new_password.trim().length < 6) {
+        res.status(400).json({ error: 'Password must be at least 6 characters long.' });
+        return;
+      }
+
+      const empId = req.params.id;
+      const db = loadDatabase();
+      const emp = (STORE.employees || []).find((e) => e.id === empId || e.user_id === empId) ||
+        (db.business_members || []).find((m) => m.id === empId || m.user_id === empId);
+
+      if (!emp || !emp.user_id) {
+        res.status(404).json({ error: 'Employee not found.' });
+        return;
+      }
+
+      const adminClient = getSupabaseAdmin();
+      if (adminClient) {
+        // Fetch current user metadata to preserve it
+        const { data: userData } = await adminClient.auth.admin.getUserById(emp.user_id);
+        const currentMeta = userData?.user?.user_metadata || {};
+        const { error: resetErr } = await adminClient.auth.admin.updateUserById(emp.user_id, {
+          password: new_password.trim(),
+          user_metadata: {
+            ...currentMeta,
+            must_change_password: true,
+          },
+        });
+        if (resetErr) {
+          res.status(500).json({ error: `Supabase password reset failed: ${resetErr.message}` });
+          return;
+        }
+      }
+
+      emp.must_change_password = true;
+
+      // Update local canonical DB if present
+      const localAuth = (db.auth_users || []).find((u) => u.id === emp.user_id);
+      if (localAuth) {
+        localAuth.password = new_password.trim();
+        saveDatabase(db);
+      }
+
+      res.json({ success: true, message: 'Password updated successfully in Supabase Auth.' });
+    } catch (err: any) {
+      res.status(500).json({ error: `Password reset error: ${err.message}` });
+    }
+  }
+);
+
+/**
+ * POST /api/auth/password-changed
+ * Called when an authenticated user completes first-login password change.
+ * Clears must_change_password flag in Supabase Auth metadata and application state.
+ */
+app.post(
+  '/api/auth/password-changed',
+  requireServerAuth,
+  async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const userId = req.userId;
+      if (!userId) {
+        res.status(401).json({ error: 'Unauthorized' });
+        return;
+      }
+
+      const adminClient = getSupabaseAdmin();
+      if (adminClient) {
+        try {
+          const { data: userData } = await adminClient.auth.admin.getUserById(userId);
+          const currentMeta = userData?.user?.user_metadata || {};
+          await adminClient.auth.admin.updateUserById(userId, {
+            user_metadata: {
+              ...currentMeta,
+              must_change_password: false,
+            },
+          });
+        } catch (adminErr) {
+          console.warn('[Supabase password-changed metadata notice]:', adminErr);
+        }
+      }
+
+      const db = loadDatabase();
+      if (STORE.employees) {
+        const emp = STORE.employees.find((e: any) => e.user_id === userId);
+        if (emp) emp.must_change_password = false;
+      }
+      if (db.business_members) {
+        const bm = db.business_members.find((m: any) => m.user_id === userId);
+        if (bm) (bm as any).must_change_password = false;
+        saveDatabase(db);
+      }
+
+      res.json({ success: true, message: 'Password change acknowledged.' });
+    } catch (err: any) {
+      res.status(500).json({ error: `Failed to record password change: ${err.message}` });
+    }
+  }
+);
+
 app.get(
   '/api/employees',
   requireServerAuth,
@@ -3934,8 +4335,6 @@ app.post(
           if (existingAuth) {
             authUserId = existingAuth.id;
             await adminClient.auth.admin.updateUserById(authUserId, {
-              password: empPassword,
-              email_confirm: true,
               user_metadata: {
                 full_name: rawFullName,
                 role: primaryRole,
@@ -3943,33 +4342,17 @@ app.post(
                 department: department || 'Operations',
                 job_title: job_title || 'Team Member',
                 business_id: targetBizUuid,
+                status: status || 'Active',
+                must_change_password: true,
               },
             });
           } else {
-            const { data: createdAuth, error: authErr } = await adminClient.auth.admin.createUser({
-              email: emailTrim,
-              password: empPassword,
-              email_confirm: true,
-              user_metadata: {
-                full_name: rawFullName,
-                role: primaryRole,
-                roles: assignedRoles,
-                department: department || 'Operations',
-                job_title: job_title || 'Team Member',
-                business_id: targetBizUuid,
-              },
+            // Direct createUser is disabled per verified onboarding architecture:
+            // All users must be created manually in Supabase Dashboard first.
+            res.status(400).json({
+              error: 'Direct user creation is disabled. Please create the user in Supabase Authentication first (Supabase Dashboard → Authentication → Users → Add User), then assign them via Unassigned Users.'
             });
-
-            if (authErr) {
-              console.error('[Remote Supabase Auth Create User Error]:', authErr.message);
-              res.status(400).json({ error: `Failed to create authentication user in Supabase: ${authErr.message}` });
-              return;
-            }
-
-            if (createdAuth?.user?.id) {
-              authUserId = createdAuth.user.id;
-              isNewAuthUser = true;
-            }
+            return;
           }
         } catch (authException: any) {
           console.error('[Remote Supabase Auth Exception]:', authException);

@@ -12,12 +12,13 @@ import { AuthPage } from './components/auth/AuthPage';
 import { MasterLoginPage } from './components/auth/MasterLoginPage';
 import { ResetPasswordPage } from './components/auth/ResetPasswordPage';
 import { AuthCallback } from './components/auth/AuthCallback';
+import { ForceChangePasswordView } from './components/auth/ForceChangePasswordView';
 import { AppShell } from './components/layout/AppShell';
 import { PublicLeadEntryForm } from './components/public/PublicLeadEntryForm';
 import { AcceptInvitationView } from './components/employees/AcceptInvitationView';
 import { PlatformAdminShell } from './components/platform/PlatformAdminShell';
 import { ErrorBoundary } from './components/common/ErrorBoundary';
-import { Loader2, ShieldAlert } from 'lucide-react';
+import { Loader2, ShieldAlert, LogOut, UserX } from 'lucide-react';
 
 function getPublicLeadEntryToken(): string | null {
   if (typeof window === 'undefined') return null;
@@ -91,7 +92,7 @@ function checkIsPasswordReset(): boolean {
 }
 
 function AppContent() {
-  const { user, isLoading, isPlatformOwner, isRecoveryMode } = useAuth();
+  const { user, isLoading, isPlatformOwner, isRecoveryMode, mustChangePassword, setMustChangePassword, isAccountDisabled, logout } = useAuth();
   const [pathname, setPathname] = useState(() => window.location.pathname + window.location.hash);
 
   useEffect(() => {
@@ -173,6 +174,44 @@ function AppContent() {
 
   if (!user) {
     return <AuthPage />;
+  }
+
+  // Block access if employee account status is Inactive / Disabled / Suspended
+  if (isAccountDisabled && user.email?.toLowerCase().trim() !== 'haseebg0012@gmail.com') {
+    return (
+      <div className="min-h-screen bg-[#0B0F19] text-white flex flex-col items-center justify-center p-6 text-center">
+        <div className="max-w-md w-full bg-slate-900 border border-slate-800 rounded-2xl p-8 shadow-2xl space-y-5">
+          <div className="w-14 h-14 rounded-2xl bg-amber-500/10 text-amber-400 border border-amber-500/20 flex items-center justify-center mx-auto">
+            <UserX className="w-7 h-7" />
+          </div>
+          <div className="space-y-2">
+            <h2 className="text-xl font-bold">Account Inactive</h2>
+            <p className="text-xs text-slate-400 leading-relaxed">
+              Your EcomHub OS account (<span className="text-slate-300 font-medium">{user.email}</span>) is currently marked as inactive.
+              Please contact your organization Owner (<span className="text-indigo-400">haseebg0012@gmail.com</span>) to restore access.
+            </p>
+          </div>
+          <button
+            onClick={() => logout()}
+            className="w-full py-2.5 px-4 bg-slate-800 hover:bg-slate-700 text-white text-xs font-semibold rounded-xl border border-slate-700 transition-colors flex items-center justify-center gap-2 cursor-pointer"
+          >
+            <LogOut className="w-4 h-4 text-slate-400" />
+            <span>Sign Out</span>
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // Force first-login password change
+  if (mustChangePassword && user.email?.toLowerCase().trim() !== 'haseebg0012@gmail.com') {
+    return (
+      <ForceChangePasswordView
+        onComplete={() => {
+          setMustChangePassword(false);
+        }}
+      />
+    );
   }
 
   return (
